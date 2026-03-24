@@ -33,6 +33,7 @@
         .container h2 {
             margin-bottom: 20px;
             text-align: center;
+            font-size: 22px;
         }
 
         form {
@@ -124,14 +125,16 @@
 <input type="file" name="file" id="file-input" style="display:none;" required>
 
         <label>هل ترغب بتحديد الأعمدة بشكل يدوي؟</label>
-        <select name="manual">
-            <option value="no">لا</option>
-            <option value="yes">نعم</option>
-        </select>
+<select name="manual" id="manual_select">
+    <option value="no" selected>لا</option>
+    <option value="yes">نعم</option>
+</select>
 
-        <input type="text" name="name_col" placeholder="اكتب اسم عمود الاسم">
-        <input type="text" name="mobile_col" placeholder="اكتب اسم عمود رقم الجوال">
-        <input type="text" name="city_col" placeholder="اكتب اسم عمود المدينة">
+<div id="manual-fields" style="display:none;">
+    <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم">
+    <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+    <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
+</div>
 
 <label>هل ترغب بالتصفية حسب الجنس؟</label>
 <select name="gender_filter" id="gender_filter">
@@ -160,10 +163,20 @@ const dropZoneText = document.getElementById('drop-zone-text');
 const form = document.getElementById('upload-form');
 const progressContainer = document.getElementById('progress-container');
 const progressBar = document.getElementById('progress-bar');
-
 const genderFilter = document.getElementById('gender_filter');
 const genderSelect = document.getElementById('gender_select');
-genderSelect.style.display = 'none'; // hidden by default
+const manualSelect = document.getElementById('manual_select');
+const manualFields = document.getElementById('manual-fields');
+
+// Toggle visibility
+manualSelect.addEventListener('change', () => {
+    if(manualSelect.value === 'yes'){
+        manualFields.style.display = 'block';
+    } else {
+        manualFields.style.display = 'none';
+    }
+});
+    genderSelect.style.display = 'none'; // hidden by default
 
 // Show/hide gender select based on filter choice
 genderFilter.addEventListener('change', () => {
@@ -226,7 +239,9 @@ form.addEventListener('submit', function(e){
             progressBar.textContent = percent + '%';
         }
     });
-
+window.addEventListener('DOMContentLoaded', () => {
+    manualFields.style.display = manualSelect.value === 'yes' ? 'block' : 'none';
+});
     xhr.onload = function(){
         if(xhr.status === 200){
             const blob = new Blob([xhr.response], {type: "application/octet-stream"});
