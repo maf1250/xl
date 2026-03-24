@@ -142,3 +142,18 @@
                 const blob = new Blob([xhr.response], {type: "application/octet-stream"});
                 const link = document.createElement('a');
                 link.href = window.URL.createObjectURL(blob);
+link.download = "contacts.vcf"; // default name
+                link.click();
+                progressBar.textContent = "✅ تم التحويل!";
+            } else {
+                progressBar.textContent = "❌ حدث خطأ!";
+            }
+        };
+
+        xhr.responseType = 'blob';
+        xhr.send(formData);
+    });
+</script>
+
+</body>
+</html>
