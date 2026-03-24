@@ -70,21 +70,21 @@
                 padding: 15px;
             }
             input[type="file"], select, input[type="text"], button {
-                font-size: 18px;
+                font-size: 45px;
             }
         }
     </style>
 </head>
 <body>
 
-<h2>📱 تحويل ملف الاكسل إلى جهات اتصال (VCF)</h2>
+<h2>تحويل ملف الاكسل إلى جهات اتصال</h2>
 
 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
 
     <input type="file" name="file" required>
     <p>اختر ملف Excel</p>
 
-    <label>هل ترغب بكتابة الأعمدة بشكل  يدوي؟</label>
+    <label>هل ترغب بكتابة الأعمدة بشكل يدوي؟</label>
     <select name="manual">
         <option value="no">لا</option>
         <option value="yes">نعم</option>
