@@ -191,16 +191,16 @@ dropZone.addEventListener('drop', e => {
     dropZone.classList.remove('dragover');
     fileInput.files = e.dataTransfer.files;
     if(fileInput.files.length > 0){
-        dropZoneText.textContent = "ملف محدد: " + fileInput.files[0].name;
+        dropZoneText.textContent =  fileInput.files[0].name;
     }
 });
 
 // Show selected file when using file input
 fileInput.addEventListener('change', () => {
     if(fileInput.files.length > 0){
-        dropZoneText.textContent = "ملف محدد: " + fileInput.files[0].name;
+        dropZoneText.textContent =  fileInput.files[0].name;
     } else {
-        dropZoneText.textContent = "اسحب وافلت ملف Excel هنا\nأو اضغط لاختياره";
+        dropZoneText.textContent = "اسحب وافلت ملف اكسل هنا\nأو اضغط لاختياره";
     }
 });
 
