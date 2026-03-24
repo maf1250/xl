@@ -67,11 +67,12 @@
 
         input[type="file"], select, input[type="text"], button {
             width: 80%;
-            padding: 10px;
-            margin: 5px 0;
+            padding: 12px;
+            margin: 8px 0;
             font-size: 16px;
-            border-radius: 6px;
+            border-radius: 8px;
             border: 1px solid #ccc;
+            box-sizing: border-box; 
         }
 
         button {
@@ -84,7 +85,11 @@
         button:hover {
             background-color: #45a049;
         }
-
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
         #progress-container {
             width: 100%;
             background-color: #ddd;
