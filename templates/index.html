@@ -135,7 +135,7 @@
 
 <label>هل ترغب بالتصفية حسب الجنس؟</label>
 <select name="gender_filter" id="gender_filter">
-    <option value="no">لا</option>
+    <option value="no" selected>لا</option>
     <option value="yes">نعم</option>
 </select>
 
@@ -163,6 +163,7 @@ const progressBar = document.getElementById('progress-bar');
 
 const genderFilter = document.getElementById('gender_filter');
 const genderSelect = document.getElementById('gender_select');
+genderSelect.style.display = 'none'; // hidden by default
 
 // Show/hide gender select based on filter choice
 genderFilter.addEventListener('change', () => {
