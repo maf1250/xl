@@ -8,113 +8,134 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
     <style>
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            font-family: 'Roboto', sans-serif;
-            background-color: #f9f9f9;
-            display: flex;
-            justify-content: flex-start;
-            align-items: center;
-        }
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap');
 
-        body {
-            padding: 20px;
-        }
-
-        .container {
-            display: flex;
-            flex-direction: column; /* stack title above form */
-            align-items: center;    /* center horizontally */
-            width: 100%;
-        }
-
-        .container h2 {
-            margin-bottom: 20px;
-            text-align: center;
-            font-size: 22px;
-        }
-
-        form {
-            width: 100%;
-            max-width: 450px;
-            padding: 20px;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .drop-zone {
-            width: 80%;
-            padding: 30px;
-            border: 2px dashed #999;
-            border-radius: 10px;
-            text-align: center;
-            cursor: pointer;
-            margin-bottom: 15px;
-            transition: 0.3s;
-            background-color: #fefefe;
-        }
-
-        .drop-zone.dragover {
-            background-color: #e0ffe0;
-            border-color: #4CAF50;
-        }
-
-        input[type="file"], select, input[type="text"], button {
-            width: 80%;
-            padding: 12px;
-            margin: 8px 0;
-            font-size: 16px;
-            border-radius: 8px;
-            border: 1px solid #ccc;
-            box-sizing: border-box; 
-        }
-
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-select {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Cairo', sans-serif;
+    background: #f2f2f7;
+    height: 100%;
 }
-        #progress-container {
-            width: 100%;
-            background-color: #ddd;
-            border-radius: 6px;
-            margin-top: 15px;
-            display: none;
-        }
 
-        #progress-bar {
-            width: 0%;
-            height: 25px;
-            background-color: #4CAF50;
-            border-radius: 6px;
-            text-align: center;
-            color: white;
-            line-height: 25px;
-        }
+/* Container */
+.container {
+    width: 100%;
+    max-width: 480px;
+    margin: auto;
+    padding: 20px;
+}
+
+/* Title */
+.container h2 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-weight: 500;
+    font-size: 20px;
+}
+
+/* Card-style form */
+form {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 20px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Inputs / selects / buttons */
+input,
+select,
+button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+    font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    background: #f9f9fb;
+    transition: all 0.2s ease;
+}
+
+/* Focus effect */
+input:focus,
+select:focus {
+    outline: none;
+    border-color: #4CAF50;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(76,175,80,0.15);
+}
+
+/* Button */
+button {
+    background: linear-gradient(135deg, #4CAF50, #43a047);
+    color: white;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+/* Drop zone */
+.drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 16px;
+    padding: 25px;
+    text-align: center;
+    background: #fafafa;
+    transition: 0.3s;
+}
+
+.drop-zone.dragover {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+/* Progress bar */
+#progress-container {
+    width: 100%;
+    background: #eee;
+    border-radius: 10px;
+    overflow: hidden;
+    display: none;
+}
+
+#progress-bar {
+    height: 20px;
+    width: 0%;
+    background: linear-gradient(90deg, #4CAF50, #66bb6a);
+    text-align: center;
+    color: white;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+/* Smooth appearance animation */
+form {
+    animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
         @media (max-width: 480px) {
             form {
                 padding: 15px;
             }
-            input[type="file"], select, input[type="text"], button {
-                font-size: 18px;
-            }
+            
         }
     </style>
 </head>
