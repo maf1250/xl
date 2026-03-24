@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <title>محول الأسماء</title>
+</head>
+<body>
+
+<h2>نأمل رفع ملف الاكسل</h2>
+
+<form action="/upload" method="post" enctype="multipart/form-data">
+
+    <input type="file" name="file" required><br><br>
+
+    <label>هل ترغب بكتابة الأعمدة بشكل يدوي</label>
+    <select name="manual">
+        <option value="no">لا</option>
+        <option value="yes">نعم</option>
+    </select><br><br>
+
+    <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم"><br>
+    <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال"><br>
+    <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة"><br><br>
+
+    <label>هل ترغب بتخصيص جنس معين</label>
+    <select name="gender_filter">
+        <option value="no">لا</option>
+        <option value="yes">نعم</option>
+    </select><br><br>
+
+    <select name="gender">
+        <option value="male">ذكر</option>
+        <option value="female">أنثى</option>
+    </select><br><br>
+
+    <button type="submit">تحويل</button>
+
+</form>
+
+</body>
+</html>
