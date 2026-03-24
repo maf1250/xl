@@ -19,7 +19,7 @@ html, body {
 
 /* Container */
 .container {
-    width: 100%;
+    width: 90%;
     max-width: 480px;
     margin: auto;
     padding: 20px;
@@ -44,6 +44,9 @@ form {
 }
     form > *:not(:last-child) {
         margin-bottom: 12px;
+    }
+    #manual-fields > *:not(:last-child) {
+        margin-bottom: 3px;
     }
 /* Inputs / selects / buttons */
 input,
@@ -82,7 +85,9 @@ button:active {
 }
 
 /* Drop zone */
+
 .drop-zone {
+    width: 77%;
     border: 2px dashed #ccc;
     border-radius: 16px;
     padding: 25px;
@@ -98,7 +103,7 @@ button:active {
 
 /* Progress bar */
 #progress-container {
-    width: 100%;
+    width: 90%;
     background: #eee;
     border-radius: 10px;
     overflow: hidden;
@@ -156,9 +161,11 @@ form {
     <option value="yes">نعم</option>
 </select>
 
-<div id="manual-fields" style="display:none;">
+<div class="manual-fields" id="manual-fields" style="display:none;">
     <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم">
+
     <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+
     <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
 </div>
 
