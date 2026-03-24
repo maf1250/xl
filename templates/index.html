@@ -2,14 +2,28 @@
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>تحويل الاكسل إلى جهات اتصال</title>
     <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <link rel="apple-touch-icon" href="icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
+        html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
         body {
-            font-family: 'Roboto', sans-serif;
-            text-align: center;
-            margin: 20px;
-            background-color: #f9f9f9;
+display: flex;
+    flex-direction: column;
+    justify-content: flex-start; /* can use center if you want vertically centered */
+    align-items: center;
+    min-height: 100vh;
+    background-color: #f9f9f9;
+    font-family: 'Roboto', sans-serif;
         }
 
         h2 {
@@ -17,13 +31,16 @@
         }
 
         form {
-            max-width: 400px;
-            margin: auto;
-            padding: 20px;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
-        }
+            width: 90%;
+    max-width: 400px;
+    margin: 20px auto;
+    padding: 20px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+}
 
         input[type="file"], select, input[type="text"], button {
             width: 100%;
@@ -46,13 +63,11 @@
         }
 
         /* Progress bar container */
-        #progress-container {
-            width: 100%;
-            background-color: #ddd;
-            border-radius: 6px;
-            margin-top: 15px;
-            display: none; /* hidden initially */
-        }
+#progress-container {
+    width: 100%;
+    height: 20px;
+    margin-top: 15px;
+}
 
         /* Progress bar fill */
         #progress-bar {
