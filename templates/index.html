@@ -114,45 +114,49 @@
 
 </form>
 
+
 <script>
-    const form = document.getElementById('upload-form');
-    const progressContainer = document.getElementById('progress-container');
-    const progressBar = document.getElementById('progress-bar');
+const form = document.getElementById('upload-form');
+const progressContainer = document.getElementById('progress-container');
+const progressBar = document.getElementById('progress-bar');
 
-    form.addEventListener('submit', function(e){
-        e.preventDefault();
+form.addEventListener('submit', function(e){
+    e.preventDefault();
 
-        const formData = new FormData(form);
-        const xhr = new XMLHttpRequest();
+    const formData = new FormData(form);
+    const fileInput = form.querySelector('input[type="file"]');
+    const originalFileName = fileInput.files[0].name; // get uploaded file name
+    const vcfFileName = originalFileName.replace(/\.[^/.]+$/, ".vcf"); // replace extension with .vcf
 
-        xhr.open('POST', '/upload', true);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload', true);
 
-        xhr.upload.addEventListener('progress', function(e){
-            if (e.lengthComputable) {
-                const percent = Math.round((e.loaded / e.total) * 100);
-                progressContainer.style.display = 'block';
-                progressBar.style.width = percent + '%';
-                progressBar.textContent = percent + '%';
-            }
-        });
-
-        xhr.onload = function(){
-            if(xhr.status === 200){
-                // download the returned file
-                const blob = new Blob([xhr.response], {type: "application/octet-stream"});
-                const link = document.createElement('a');
-                link.href = window.URL.createObjectURL(blob);
-link.download = "contacts.vcf"; // default name
-                link.click();
-                progressBar.textContent = "✅ تم التحويل!";
-            } else {
-                progressBar.textContent = "❌ حدث خطأ!";
-            }
-        };
-
-        xhr.responseType = 'blob';
-        xhr.send(formData);
+    xhr.upload.addEventListener('progress', function(e){
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressContainer.style.display = 'block';
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+        }
     });
+
+    xhr.onload = function(){
+        if(xhr.status === 200){
+            // download the returned file
+            const blob = new Blob([xhr.response], {type: "application/octet-stream"});
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = vcfFileName; // use the uploaded file name
+            link.click();
+            progressBar.textContent = "✅ تم التحويل!";
+        } else {
+            progressBar.textContent = "❌ حدث خطأ!";
+        }
+    };
+
+    xhr.responseType = 'blob';
+    xhr.send(formData);
+});
 </script>
 
 </body>
