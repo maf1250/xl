@@ -129,20 +129,20 @@
             <option value="yes">نعم</option>
         </select>
 
-        <input type="text" name="name_col" placeholder="اسم العمود (الاسم)">
-        <input type="text" name="mobile_col" placeholder="رقم الجوال">
-        <input type="text" name="city_col" placeholder="المدينة">
+        <input type="text" name="name_col" placeholder="اكتب اسم عمود الاسم)">
+        <input type="text" name="mobile_col" placeholder="اكتب اسم عمود رقم الجوال">
+        <input type="text" name="city_col" placeholder="اكتب اسم عمود المدينة">
 
-        <label>هل ترغب بالتصفية حسب الجنس؟</label>
-        <select name="gender_filter">
-            <option value="no">لا</option>
-            <option value="yes">نعم</option>
-        </select>
+<label>هل ترغب بالتصفية حسب الجنس؟</label>
+<select name="gender_filter" id="gender_filter">
+    <option value="no">لا</option>
+    <option value="yes">نعم</option>
+</select>
 
-        <select name="gender">
-            <option value="male">ذكر</option>
-            <option value="female">أنثى</option>
-        </select>
+<select name="gender" id="gender_select" style="display:none;">
+    <option value="male">ذكر</option>
+    <option value="female">أنثى</option>
+</select>
 
         <button type="submit">تحويل</button>
 
@@ -160,6 +160,18 @@ const dropZoneText = document.getElementById('drop-zone-text');
 const form = document.getElementById('upload-form');
 const progressContainer = document.getElementById('progress-container');
 const progressBar = document.getElementById('progress-bar');
+
+const genderFilter = document.getElementById('gender_filter');
+const genderSelect = document.getElementById('gender_select');
+
+// Show/hide gender select based on filter choice
+genderFilter.addEventListener('change', () => {
+    if(genderFilter.value === 'yes'){
+        genderSelect.style.display = 'block';
+    } else {
+        genderSelect.style.display = 'none';
+    }
+});
 
 // Drag & Drop
 dropZone.addEventListener('click', () => fileInput.click());
