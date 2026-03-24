@@ -1,40 +1,144 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html lang="ar" dir="rtl">
 <head>
-    <title>محول الأسماء</title>
+    <meta charset="UTF-8">
+    <title>تحويل الاكسل إلى جهات اتصال</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        form {
+            max-width: 400px;
+            margin: auto;
+            padding: 20px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0px 4px 12px rgba(0,0,0,0.1);
+        }
+
+        input[type="file"], select, input[type="text"], button {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            font-size: 16px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        /* Progress bar container */
+        #progress-container {
+            width: 100%;
+            background-color: #ddd;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none; /* hidden initially */
+        }
+
+        /* Progress bar fill */
+        #progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4CAF50;
+            border-radius: 6px;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+        }
+
+        @media (max-width: 480px) {
+            form {
+                padding: 15px;
+            }
+            input[type="file"], select, input[type="text"], button {
+                font-size: 18px;
+            }
+        }
+    </style>
 </head>
 <body>
 
-<h2>نأمل رفع ملف الاكسل</h2>
+<h2>📱 تحويل ملف الاكسل إلى جهات اتصال (VCF)</h2>
 
-<form action="/upload" method="post" enctype="multipart/form-data">
+<form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
 
-    <input type="file" name="file" required><br><br>
+    <input type="file" name="file" required>
+    <p>اختر ملف Excel</p>
 
-    <label>هل ترغب بكتابة الأعمدة بشكل يدوي</label>
+    <label>هل ترغب بكتابة الأعمدة بشكل  يدوي؟</label>
     <select name="manual">
         <option value="no">لا</option>
         <option value="yes">نعم</option>
-    </select><br><br>
+    </select>
 
-    <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم"><br>
-    <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال"><br>
-    <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة"><br><br>
+    <input type="text" name="name_col" placeholder="اسم عمود الاسم">
+    <input type="text" name="mobile_col" placeholder="اسم عمود رقم الجوال">
+    <input type="text" name="city_col" placeholder="اسم عمود المدينة">
 
-    <label>هل ترغب بتخصيص جنس معين</label>
+    <label>تصفية حسب الجنس؟</label>
     <select name="gender_filter">
         <option value="no">لا</option>
         <option value="yes">نعم</option>
-    </select><br><br>
+    </select>
 
     <select name="gender">
         <option value="male">ذكر</option>
         <option value="female">أنثى</option>
-    </select><br><br>
+    </select>
 
     <button type="submit">تحويل</button>
 
+    <!-- Progress bar -->
+    <div id="progress-container">
+        <div id="progress-bar">0%</div>
+    </div>
+
 </form>
 
-</body>
-</html>
+<script>
+    const form = document.getElementById('upload-form');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+
+    form.addEventListener('submit', function(e){
+        e.preventDefault();
+
+        const formData = new FormData(form);
+        const xhr = new XMLHttpRequest();
+
+        xhr.open('POST', '/upload', true);
+
+        xhr.upload.addEventListener('progress', function(e){
+            if (e.lengthComputable) {
+                const percent = Math.round((e.loaded / e.total) * 100);
+                progressContainer.style.display = 'block';
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = percent + '%';
+            }
+        });
+
+        xhr.onload = function(){
+            if(xhr.status === 200){
+                // download the returned file
+                const blob = new Blob([xhr.response], {type: "application/octet-stream"});
+                const link = document.createElement('a');
+                link.href = window.URL.createObjectURL(blob);
