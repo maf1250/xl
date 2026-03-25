@@ -1,35 +1,37 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, request, send_file
+import pandas as pd
 import os
-from converter import process_file
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/upload", methods=["POST"])
+@app.route('/upload', methods=['POST'])
 def upload():
-    file = request.files["file"]
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file = request.files['file']
+    filename = file.filename
+    base_name = os.path.splitext(filename)[0]
+
+    filepath = os.path.join("uploads", filename)
     file.save(filepath)
 
-    # Get form inputs
-    use_manual = request.form.get("manual") == "yes"
-    use_gender = request.form.get("gender_filter") == "yes"
-    gender = request.form.get("gender")
+    df = pd.read_excel(filepath, engine='openpyxl')
 
-    mapping_inputs = {
-        request.form.get("name_col"): "Name",
-        request.form.get("mobile_col"): "Mobile",
-        request.form.get("city_col"): "City"
-    } if use_manual else {}
+    # --- Your processing logic ---
+    df.columns = df.columns.str.strip()
+    df = df.rename(columns={"اسم الحاج":"Name","رقم الجوال":"Mobile","المدينة":"City"})
+    df["Mobile"] = df["Mobile"].apply(lambda x: "+966" + str(x).replace("05","") if str(x).startswith("05") else x)
+    df[["FirstName","LastName"]] = df["Name"].apply(lambda n: pd.Series(str(n).split(' ',1) if ' ' in str(n) else [str(n),'']))
+    df["FullName"] = (df["FirstName"] + " " + df["LastName"]).str.strip()
+    df = df.drop_duplicates(subset=["Mobile"])
 
-    output = process_file(filepath, use_manual, mapping_inputs, use_gender, gender)
+    output_path = os.path.join("uploads", base_name + ".vcf")
+    with open(output_path,"w",encoding="utf-8") as vcf:
+        for _, row in df.iterrows():
+            vcf.write("BEGIN:VCARD\n")
+            vcf.write("VERSION:3.0\n")
+            vcf.write(f"N:{row['LastName']};{row['FirstName']};;;\n")
+            vcf.write(f"FN:{row['FullName']}\n")
+            vcf.write(f"ORG:{row.get('City','')}\n")
+            vcf.write(f"TEL;TYPE=CELL:{row['Mobile']}\n")
+            vcf.write("END:VCARD\n")
 
-    return send_file(output, as_attachment=True)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    return send_file(output_path, as_attachment=True, download_name=base_name+".vcf", mimetype="text/vcard")
