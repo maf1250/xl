@@ -1,75 +1,87 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <title>تحويل الاكسل إلى جهات اتصال</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
-    <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>تحويل Excel إلى VCF</title>
 
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
 html, body {
     margin: 0;
     padding: 0;
-    font-family: sans-serif;
+    font-family: 'Cairo', sans-serif;
     background: #f2f2f7;
-    height: 100%;
 }
 
-/* Container */
 .container {
-    width: 90%;
     max-width: 480px;
     margin: auto;
     padding: 20px;
+<div id="success-screen" class="success hidden">
+    <h3>✅ تم التحويل بنجاح</h3>
+    <p>تم تحميل ملف جهات الاتصال</p>
+    <button onclick="resetApp()">تحميل ملف آخر</button>
+</div>
 }
-
-/* Title */
-.container h2 {
-    text-align: center;
-    margin-bottom: 20px;
-    font-weight: 500;
-    font-size: 18px;
-}
-
-/* Card-style form */
-form {
-    width: 90%;
-    background: #ffffff;
-    padding: 20px;
-    border-radius: 20px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+.success {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #f2f2f7;
     display: flex;
     flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+    text-align: center;
 }
-    form > *:not(:last-child) {
-        margin-bottom: 12px;
-    }
-    #manual-fields > *:not(:last-child) {
-        margin-bottom: 3px;
-    }
-/* Inputs / selects / buttons */
-input,
-select,
-button {
-    width: 90%;
+
+.success h3 {
+    font-size: 22px;
+    margin-bottom: 10px;
+}
+
+.success p {
+    color: #666;
+    margin-bottom: 20px;
+}
+h2 {
+    text-align: center;
+}
+
+/* Section */
+.section {
+    background: #fff;
+    padding: 15px;
+    border-radius: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+
+.section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #666;
+}
+
+/* Inputs */
+input, select, button {
+    width: 100%;
     box-sizing: border-box;
     padding: 14px;
     font-size: 16px;
     border-radius: 12px;
-    border: 2px solid #ddd;
+    border: 1px solid #ddd;
     background: #f9f9fb;
-    transition: all 0.4s ease;
 }
 
-/* Focus effect */
-input:focus,
-select:focus {
-    outline: none;
-    border-color: #4CAF50;
-    background: #fff;
-    box-shadow: 0 0 0 3px rgba(76,175,80,0.15);
+/* Spacing */
+.section > *:not(:last-child) {
+    margin-bottom: 10px;
 }
 
 /* Button */
@@ -77,24 +89,16 @@ button {
     background: linear-gradient(135deg, #4CAF50, #43a047);
     color: white;
     border: none;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-button:active {
-    transform: scale(0.98);
+    font-weight: bold;
 }
 
 /* Drop zone */
-
 .drop-zone {
-    width: 77%;
     border: 2px dashed #ccc;
     border-radius: 16px;
     padding: 25px;
     text-align: center;
     background: #fafafa;
-    transition: 0.3s;
 }
 
 .drop-zone.dragover {
@@ -104,133 +108,124 @@ button:active {
 
 /* Progress bar */
 #progress-container {
-    width: 90%;
-    background: #eee;
-    border-radius: 10px;
-    overflow: hidden;
     display: none;
+    background: #eee;
+    border-radius: 70px;
+    overflow: hidden;
 }
 
 #progress-bar {
-    height: 20px;
+    height: 30px;
     width: 0%;
-    background: linear-gradient(90deg, #4CAF50, #66bb6a);
-    text-align: center;
+    background: #4CAF50;
     color: white;
-    font-size: 12px;
-    line-height: 20px;
+    margin-bottom: 5px;
+    text-align: center;
 }
+    #manual-fields > *:not(:last-child) {
+        margin-bottom: 3px;
+/* Animations */
 
-/* Smooth appearance animation */
-form {
-    animation: fadeIn 0.4s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.hidden {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: all 0.5s ease;
+pointer-events: none;
 }
-
-        @media (max-width: 480px) {
-            form {
-                padding: 15px;
-            }
-            
-        }
-    </style>
+.show {
+    	max-height: 200px;
+    	opacity: 1;
+	transition: all 0.5s ease;
+}
+</style>
 </head>
+
 <body>
+
 <div class="container">
-    <h2>📱 تحويل ملفات الاكسل إلى جهات اتصال</h2>
+    <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
 
     <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
 
-   <div class="drop-zone" id="drop-zone">
-    <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
-</div>
-<input type="file" name="file" id="file-input" style="display:none;" required>
+        <!-- Upload -->
+        <div class="section">
+            <label>رفع الملف</label>
 
-        <label>هل ترغب بتحديد عنوانين الأعمدة بشكل يدوي؟</label>
-<select name="manual" id="manual_select">
-    <option value="no" selected>لا</option>
-    <option value="yes">نعم</option>
-</select>
+            <div class="drop-zone" id="drop-zone">
+                <span id="drop-zone-text">
+                    اسحب وافلت ملف Excel هنا<br>أو اضغط لاختياره
+                </span>
+            </div>
 
-<div class="manual-fields" id="manual-fields" style="display:none;">
-    <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم">
+            <input type="file" id="file-input" name="file" hidden required>
+        </div>
 
-    <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+        <!-- Manual Mapping -->
+        <div class="section">
+              <label>كيف ترغب بتحديد عنوانين الأعمدة؟</label>
 
-    <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
-</div>
 
-<label>هل ترغب بالتصفية حسب الجنس؟</label>
-<select name="gender_filter" id="gender_filter">
-    <option value="no" selected>لا</option>
-    <option value="yes">نعم</option>
-</select>
+            <select name="manual" id="manual_select">
+                <option value="no" selected>تلقائيًا</option>
+                <option value="yes">يدويًا</option>
+            </select>
 
-<select name="gender" id="gender_select" style="display:none;">
-    <option value="male">ذكر</option>
-    <option value="female">أنثى</option>
-</select>
+            <div id="manual-fields" class="hidden">
+                <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم">
+    		<input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+    		<input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
+            </div>
+        </div>
 
-        <button type="submit">تحويل</button>
+        <!-- Gender -->
+        <div class="section">
+            <label>هل ترغب بالتصفية حسب الجنس؟</label>
 
+            <select name="gender_filter" id="gender_filter">
+                <option value="no" selected>لا</option>
+                <option value="yes">نعم</option>
+            </select>
+
+            <select name="gender" id="gender_select" class="hidden">
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+            </select>
+        </div>
+
+        <!-- Progress -->
         <div id="progress-container">
             <div id="progress-bar">0%</div>
         </div>
+
+        <button type="submit">تحويل</button>
+
     </form>
 </div>
-
 
 <script>
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
-const form = document.getElementById('upload-form');
-const progressContainer = document.getElementById('progress-container');
-const progressBar = document.getElementById('progress-bar');
-const genderFilter = document.getElementById('gender_filter');
-const genderSelect = document.getElementById('gender_select');
-const manualSelect = document.getElementById('manual_select');
-const manualFields = document.getElementById('manual-fields');
 
-// Toggle visibility
-manualSelect.addEventListener('change', () => {
-    if(manualSelect.value === 'yes'){
-        manualFields.style.display = 'block';
-    } else {
-        manualFields.style.display = 'none';
-    }
-});
-    genderSelect.style.display = 'none'; // hidden by default
-
-// Show/hide gender select based on filter choice
-genderFilter.addEventListener('change', () => {
-    if(genderFilter.value === 'yes'){
-        genderSelect.style.display = 'block';
-    } else {
-        genderSelect.style.display = 'none';
-    }
-});
-
-// Drag & Drop
+// Click to open file
 dropZone.addEventListener('click', () => fileInput.click());
 
+// Show file name
+fileInput.addEventListener('change', () => {
+    if(fileInput.files.length > 0){
+        dropZoneText.textContent = fileInput.files[0].name;
+    }
+});
+
+// Drag & drop
 dropZone.addEventListener('dragover', e => {
     e.preventDefault();
     dropZone.classList.add('dragover');
 });
 
-dropZone.addEventListener('dragleave', e => {
-    e.preventDefault();
+dropZone.addEventListener('dragleave', () => {
     dropZone.classList.remove('dragover');
 });
 
@@ -238,60 +233,103 @@ dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
     fileInput.files = e.dataTransfer.files;
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent =  fileInput.files[0].name;
-    }
+    dropZoneText.textContent = fileInput.files[0].name;
 });
 
-// Show selected file when using file input
-fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent =  fileInput.files[0].name;
+// Gender toggle
+const genderFilter = document.getElementById('gender_filter');
+const genderSelect = document.getElementById('gender_select');
+
+genderFilter.addEventListener('change', () => {
+    if (genderFilter.value === 'yes') {
+        genderSelect.classList.remove('hidden');
+        genderSelect.classList.add('show');
     } else {
-        dropZoneText.textContent = "اسحب وافلت ملف اكسل هنا\nأو اضغط لاختياره";
+        genderSelect.classList.remove('show');
+        genderSelect.classList.add('hidden');
     }
 });
 
-// Submit with AJAX
-form.addEventListener('submit', function(e){
+// Manual fields toggle
+const manualSelect = document.getElementById('manual_select');
+const manualFields = document.getElementById('manual-fields');
+
+manualSelect.addEventListener('change', () => {
+    if (manualSelect.value === 'yes') {
+        manualFields.classList.remove('hidden');
+        manualFields.classList.add('show');
+    } else {
+        manualFields.classList.remove('show');
+        manualFields.classList.add('hidden');
+    }
+});
+
+// Progress bar simulation
+const form = document.getElementById('upload-form');
+const progressBar = document.getElementById('progress-bar');
+const progressContainer = document.getElementById('progress-container');
+
+// Real upload progress (accurate %)
+form.addEventListener('submit', function(e) {
     e.preventDefault();
 
-    if(fileInput.files.length === 0) return;
+    const file = fileInput.files[0];
+    if (!file) {
+        alert("يرجى اختيار ملف");
+        return;
+    }
 
-    const formData = new FormData(form);
-    const originalFileName = fileInput.files[0].name;
-    const vcfFileName = originalFileName.replace(/\.[^/.]+$/, ".vcf");
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Include other fields
+    formData.append("manual", manualSelect.value);
+    formData.append("gender_filter", genderFilter.value);
+    formData.append("gender", genderSelect.value);
+
+    // Progress UI
+    progressContainer.style.display = 'block';
+    progressBar.style.width = "0%";
+    progressBar.textContent = "0%";
 
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload', true);
+    xhr.open("POST", "/upload", true);
 
-    xhr.upload.addEventListener('progress', function(e){
-        if(e.lengthComputable){
-            const percent = Math.round((e.loaded / e.total) * 100);
-            progressContainer.style.display = 'block';
-            progressBar.style.width = percent + '%';
-            progressBar.textContent = percent + '%';
-        }
-    });
-window.addEventListener('DOMContentLoaded', () => {
-    manualFields.style.display = manualSelect.value === 'yes' ? 'block' : 'none';
-});
-    xhr.onload = function(){
-        if(xhr.status === 200){
-            const blob = new Blob([xhr.response], {type: "application/octet-stream"});
-            const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = vcfFileName;
-            link.click();
-            progressBar.textContent = "✅ تم التحويل!";
-        } else {
-            progressBar.textContent = "❌ حدث خطأ!";
+    // 🔥 REAL upload progress
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            let percent = Math.round((e.loaded / e.total) * 100);
+            progressBar.style.width = percent + "%";
+            progressBar.textContent = percent + "%";
         }
     };
 
-    xhr.responseType = 'blob';
+    xhr.onload = function() {
+        if (xhr.status === 200) {
+            const blob = new Blob([xhr.response], { type: "text/vcard" });
+	   
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+
+            // ✅ SAME NAME AS UPLOADED FILE
+            const originalName = file.name.replace(/\.[^/.]+$/, "");
+            a.download = originalName + ".vcf";
+	     document.getElementById('success-screen').classList.remove('hidden');
+	    document.getElementById('success-screen').classList.add('show');
+            a.href = url;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+        } else {
+            alert("حدث خطأ أثناء التحويل");
+        }
+    };
+
+    xhr.responseType = "blob";
     xhr.send(formData);
 });
 </script>
+
 </body>
 </html>
