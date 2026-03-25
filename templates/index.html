@@ -128,16 +128,16 @@ button {
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
 
-    <form id="upload-form" enctype="multipart/form-data">
-
+<form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
         <!-- Upload -->
         <div class="section">
             <label>رفع الملف</label>
             <div class="drop-zone" id="drop-zone">
                 <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
             </div>
-            <input type="file" id="file-input" name="file" hidden required>
-        </div>
+<!-- Hidden input (required internally) -->
+            <input type="file" id="file-input" name="file" style="display:none;" required>
+     		</div>
 
         <!-- Manual Mapping -->
         <div class="section">
@@ -180,15 +180,7 @@ const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 
-// Click fallback (important for iPhone)
-dropZone.addEventListener('click', () => fileInput.click());
-
-// Show filename
-fileInput.addEventListener('change', () => {
-    dropZoneText.textContent = "📄 " + fileInput.files[0].name;
-});
-
-// Drag & drop
+// Drag & drop ONLY
 dropZone.addEventListener('dragover', e => {
     e.preventDefault();
     dropZone.classList.add('dragover');
@@ -201,58 +193,17 @@ dropZone.addEventListener('dragleave', () => {
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
+
     fileInput.files = e.dataTransfer.files;
     dropZoneText.textContent = "📄 " + fileInput.files[0].name;
 });
 
-// Upload with AJAX
+// Submit (no AJAX)
 const form = document.getElementById('upload-form');
-const progressBar = document.getElementById('progress-bar');
 const progressContainer = document.getElementById('progress-container');
-const downloadLink = document.getElementById('download-link');
 
-form.addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const file = fileInput.files[0];
-    if (!file) {
-        alert("يرجى اختيار ملف");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/upload", true);
-    xhr.responseType = "blob";
-
+form.addEventListener('submit', () => {
     progressContainer.style.display = "block";
-
-    xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            progressBar.style.width = percent + "%";
-            progressBar.textContent = percent + "%";
-        }
-    };
-
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            progressBar.style.width = "100%";
-            progressBar.textContent = "تم التحويل";
-
-            const blob = new Blob([xhr.response], { type: "text/x-vcard" });
-            const url = window.URL.createObjectURL(blob);
-
-            downloadLink.href = url;
-            downloadLink.style.display = "block";
-        } else {
-            alert("حدث خطأ");
-        }
-    };
-
-    xhr.send(formData);
 });
 </script>
 
