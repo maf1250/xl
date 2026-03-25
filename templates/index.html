@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>تحويل Excel إلى VCF</title>
+<title>تحويل ملف الاكسل إلى جهات اتصال</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap" rel="stylesheet">
 
@@ -19,11 +19,7 @@ html, body {
     max-width: 480px;
     margin: auto;
     padding: 20px;
-<div id="success-screen" class="success hidden">
-    <h3>✅ تم التحويل بنجاح</h3>
-    <p>تم تحميل ملف جهات الاتصال</p>
-    <button onclick="resetApp()">تحميل ملف آخر</button>
-</div>
+
 }
 .success {
     position: fixed;
@@ -204,19 +200,24 @@ pointer-events: none;
     </form>
 </div>
 
+<!-- Success Screen -->
+<div id="success-screen" class="success hidden">
+    <h3>✅ تم التحويل بنجاح</h3>
+    <p>تم إنشاء الملف بنجاح</p>
+    <button onclick="downloadFile()">تحميل الملف</button>
+    <button onclick="resetApp()">ملف جديد</button>
+</div>
 <script>
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 
-// Click to open file
+// Click
 dropZone.addEventListener('click', () => fileInput.click());
 
-// Show file name
+// Show filename
 fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent = fileInput.files[0].name;
-    }
+    dropZoneText.textContent = fileInput.files[0].name;
 });
 
 // Drag & drop
@@ -236,66 +237,42 @@ dropZone.addEventListener('drop', e => {
     dropZoneText.textContent = fileInput.files[0].name;
 });
 
-// Gender toggle
+// Toggles
 const genderFilter = document.getElementById('gender_filter');
 const genderSelect = document.getElementById('gender_select');
 
 genderFilter.addEventListener('change', () => {
-    if (genderFilter.value === 'yes') {
-        genderSelect.classList.remove('hidden');
-        genderSelect.classList.add('show');
-    } else {
-        genderSelect.classList.remove('show');
-        genderSelect.classList.add('hidden');
-    }
+    genderSelect.classList.toggle('show', genderFilter.value === 'yes');
+    genderSelect.classList.toggle('hidden', genderFilter.value !== 'yes');
 });
 
-// Manual fields toggle
 const manualSelect = document.getElementById('manual_select');
 const manualFields = document.getElementById('manual-fields');
 
 manualSelect.addEventListener('change', () => {
-    if (manualSelect.value === 'yes') {
-        manualFields.classList.remove('hidden');
-        manualFields.classList.add('show');
-    } else {
-        manualFields.classList.remove('show');
-        manualFields.classList.add('hidden');
-    }
+    manualFields.classList.toggle('show', manualSelect.value === 'yes');
+    manualFields.classList.toggle('hidden', manualSelect.value !== 'yes');
 });
 
-// Progress bar simulation
+// Upload + progress
 const form = document.getElementById('upload-form');
 const progressBar = document.getElementById('progress-bar');
 const progressContainer = document.getElementById('progress-container');
 
-// Real upload progress (accurate %)
 form.addEventListener('submit', function(e) {
     e.preventDefault();
 
     const file = fileInput.files[0];
-    if (!file) {
-        alert("يرجى اختيار ملف");
-        return;
-    }
+    if (!file) return alert("يرجى اختيار ملف");
 
     const formData = new FormData();
     formData.append("file", file);
 
-    // Include other fields
-    formData.append("manual", manualSelect.value);
-    formData.append("gender_filter", genderFilter.value);
-    formData.append("gender", genderSelect.value);
-
-    // Progress UI
     progressContainer.style.display = 'block';
-    progressBar.style.width = "0%";
-    progressBar.textContent = "0%";
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/upload", true);
 
-    // 🔥 REAL upload progress
     xhr.upload.onprogress = function(e) {
         if (e.lengthComputable) {
             let percent = Math.round((e.loaded / e.total) * 100);
@@ -307,28 +284,37 @@ form.addEventListener('submit', function(e) {
     xhr.onload = function() {
         if (xhr.status === 200) {
             const blob = new Blob([xhr.response], { type: "text/vcard" });
-	   
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
 
-            // ✅ SAME NAME AS UPLOADED FILE
             const originalName = file.name.replace(/\.[^/.]+$/, "");
-            a.download = originalName + ".vcf";
-	     document.getElementById('success-screen').classList.remove('hidden');
-	    document.getElementById('success-screen').classList.add('show');
-            a.href = url;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+            const url = window.URL.createObjectURL(blob);
 
+            window.downloadUrl = url;
+            window.downloadName = originalName + ".vcf";
+
+            document.getElementById('success-screen').classList.remove('hidden');
         } else {
-            alert("حدث خطأ أثناء التحويل");
+            alert("حدث خطأ");
         }
     };
 
     xhr.responseType = "blob";
     xhr.send(formData);
 });
+
+// Download
+function downloadFile() {
+    const a = document.createElement("a");
+    a.href = window.downloadUrl;
+    a.download = window.downloadName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+}
+
+// Reset
+function resetApp() {
+    location.reload();
+}
 </script>
 
 </body>
