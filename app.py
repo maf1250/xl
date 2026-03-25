@@ -151,7 +151,7 @@ def upload():
     # =========================
     return send_file(
         output_path,
-        as_attachment=False,   # 🔥 This enables preview instead of forced download
+        as_attachment=False,   
         mimetype="text/x-vcard"
     )
 
