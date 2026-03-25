@@ -62,6 +62,7 @@ button {
     color: white;
     border: none;
     font-weight: bold;
+    cursor: pointer;
 }
 
 /* Drop zone */
@@ -84,6 +85,7 @@ button {
     background: #eee;
     border-radius: 70px;
     overflow: hidden;
+    margin-bottom: 10px;
 }
 
 #progress-bar {
@@ -91,28 +93,16 @@ button {
     width: 0%;
     background: #4CAF50;
     color: white;
-    margin-bottom: 5px;
     text-align: center;
+    line-height: 30px;
 }
-    #manual-fields > *:not(:last-child) {
-        margin-bottom: 3px;
-	}
-/* Animations */
 
-.hidden {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: all 0.5s ease;
-	pointer-events: none;
-	padding: 0;
-    margin: 0;
-    border: none;
+/* Manual fields toggle */
+#manual-fields.hidden, #gender_select.hidden {
+    display: none;
 }
-.show {
-    	max-height: 200px;
-    	opacity: 1;
-		transition: all 0.5s ease;
+#manual-fields.show, #gender_select.show {
+    display: block;
 }
 </style>
 </head>
@@ -122,45 +112,38 @@ button {
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
 
-    <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+    <form id="upload-form" enctype="multipart/form-data">
 
         <!-- Upload -->
         <div class="section">
             <label>رفع الملف</label>
-
             <div class="drop-zone" id="drop-zone">
-                <span id="drop-zone-text">
-                    اسحب وافلت ملف Excel هنا<br>أو اضغط لاختياره
-                </span>
+                <span id="drop-zone-text">اسحب وافلت ملف Excel هنا<br>أو اضغط لاختياره</span>
             </div>
-
-            <input type="file" id="file-input" name="file" hidden required>
+            <input type="file" id="file-input" name="file" required>
         </div>
 
         <!-- Manual Mapping -->
         <div class="section">
-              <label>هل ترغب بتحديد عنوانين الأعمدة؟</label>
+            <label>هل ترغب بتحديد عنوانين الأعمدة؟</label>
             <select name="manual" id="manual_select">
                 <option value="no" selected>لا</option>
                 <option value="yes">نعم</option>
             </select>
-
             <div id="manual-fields" class="hidden">
                 <input type="text" name="name_col" placeholder="اكتب عنوان عمود الاسم">
-    		<input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
-    		<input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
+                <input type="text" name="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+                <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
             </div>
         </div>
 
         <!-- Gender -->
         <div class="section">
             <label>هل ترغب بالتصفية حسب الجنس؟</label>
-
             <select name="gender_filter" id="gender_filter">
                 <option value="no" selected>لا</option>
                 <option value="yes">نعم</option>
             </select>
-
             <select name="gender" id="gender_select" class="hidden">
                 <option value="male">ذكر</option>
                 <option value="female">أنثى</option>
@@ -173,22 +156,22 @@ button {
         </div>
 
         <button type="submit">تحويل</button>
-
     </form>
 </div>
-
 
 <script>
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 
-// Click
+// Click to select file
 dropZone.addEventListener('click', () => fileInput.click());
 
-// Show filename
+// Show selected file name
 fileInput.addEventListener('change', () => {
-    dropZoneText.textContent = fileInput.files[0].name;
+    if(fileInput.files.length > 0){
+        dropZoneText.textContent = fileInput.files[0].name;
+    }
 });
 
 // Drag & drop
@@ -196,11 +179,7 @@ dropZone.addEventListener('dragover', e => {
     e.preventDefault();
     dropZone.classList.add('dragover');
 });
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dragover');
-});
-
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
@@ -208,35 +187,89 @@ dropZone.addEventListener('drop', e => {
     dropZoneText.textContent = fileInput.files[0].name;
 });
 
-// Toggles
-const genderFilter = document.getElementById('gender_filter');
-const genderSelect = document.getElementById('gender_select');
-
-genderFilter.addEventListener('change', () => {
-    genderSelect.classList.toggle('show', genderFilter.value === 'yes');
-    genderSelect.classList.toggle('hidden', genderFilter.value !== 'yes');
-});
-
+// Toggle manual fields
 const manualSelect = document.getElementById('manual_select');
 const manualFields = document.getElementById('manual-fields');
-
 manualSelect.addEventListener('change', () => {
-    manualFields.classList.toggle('show', manualSelect.value === 'yes');
-    manualFields.classList.toggle('hidden', manualSelect.value !== 'yes');
+    if(manualSelect.value === 'yes'){
+        manualFields.classList.remove('hidden');
+        manualFields.classList.add('show');
+    } else {
+        manualFields.classList.remove('show');
+        manualFields.classList.add('hidden');
+    }
 });
 
-// Upload + progress
+// Toggle gender select
+const genderFilter = document.getElementById('gender_filter');
+const genderSelect = document.getElementById('gender_select');
+genderFilter.addEventListener('change', () => {
+    if(genderFilter.value === 'yes'){
+        genderSelect.classList.remove('hidden');
+        genderSelect.classList.add('show');
+    } else {
+        genderSelect.classList.remove('show');
+        genderSelect.classList.add('hidden');
+    }
+});
+
+// AJAX upload with real-time progress
 const form = document.getElementById('upload-form');
-const progressBar = document.getElementById('progress-bar');
 const progressContainer = document.getElementById('progress-container');
+const progressBar = document.getElementById('progress-bar');
 
-// download
-document.querySelector("form").addEventListener("submit", () => {
-    document.getElementById("progress-container").style.display = "block";
-    document.getElementById("progress-bar").style.width = "100%";
-    document.getElementById("progress-bar").textContent = "قيد التحويل...";
+form.addEventListener('submit', function(e){
+    e.preventDefault();
+
+    if(!fileInput.files.length){
+        alert("يرجى اختيار ملف");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData(form);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/upload", true);
+    xhr.responseType = "blob"; // important for download
+
+    // Upload progress
+    xhr.upload.onprogress = function(event){
+        if(event.lengthComputable){
+            const percent = Math.round((event.loaded / event.total) * 100);
+            progressContainer.style.display = "block";
+            progressBar.style.width = percent + "%";
+            progressBar.textContent = percent + "%";
+        }
+    };
+
+    // On complete
+    xhr.onload = function(){
+        if(xhr.status === 200){
+            // Auto-download the file
+            const blob = new Blob([xhr.response], { type: "text/vcard" });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const originalName = file.name.replace(/\.[^/.]+$/, "");
+            a.href = url;
+            a.download = originalName + ".vcf";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            // Show "تم التحويل" after download
+            progressBar.style.width = "100%";
+            progressBar.textContent = "تم التحويل";
+
+            // Hide progress after 3 seconds
+            setTimeout(()=>{ progressContainer.style.display="none"; }, 3000);
+        } else {
+            alert("حدث خطأ أثناء التحويل");
+        }
+    };
+
+    xhr.send(formData);
 });
-
 </script>
 
 </body>
