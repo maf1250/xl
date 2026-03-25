@@ -136,7 +136,7 @@ button {
             <div class="drop-zone" id="drop-zone">
                 <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
             </div>
-            <input type="file" id="file-input" name="file" required>
+            <input type="file" id="file-input" name="file" hidden required>
         </div>
 
         <!-- Manual Mapping -->
@@ -180,14 +180,12 @@ const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 
-// Click to select file
+// Click fallback (important for iPhone)
 dropZone.addEventListener('click', () => fileInput.click());
 
-// Show selected file name
+// Show filename
 fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent = fileInput.files[0].name;
-    }
+    dropZoneText.textContent = "📄 " + fileInput.files[0].name;
 });
 
 // Drag & drop
@@ -195,88 +193,62 @@ dropZone.addEventListener('dragover', e => {
     e.preventDefault();
     dropZone.classList.add('dragover');
 });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('dragover');
+});
+
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
     fileInput.files = e.dataTransfer.files;
-    dropZoneText.textContent = fileInput.files[0].name;
+    dropZoneText.textContent = "📄 " + fileInput.files[0].name;
 });
 
-// Toggle manual fields
-const manualSelect = document.getElementById('manual_select');
-const manualFields = document.getElementById('manual-fields');
-manualSelect.addEventListener('change', () => {
-    if(manualSelect.value === 'yes'){
-        manualFields.classList.remove('hidden');
-        manualFields.classList.add('show');
-    } else {
-        manualFields.classList.remove('show');
-        manualFields.classList.add('hidden');
-    }
-});
-
-// Toggle gender select
-const genderFilter = document.getElementById('gender_filter');
-const genderSelect = document.getElementById('gender_select');
-genderFilter.addEventListener('change', () => {
-    if(genderFilter.value === 'yes'){
-        genderSelect.classList.remove('hidden');
-        genderSelect.classList.add('show');
-    } else {
-        genderSelect.classList.remove('show');
-        genderSelect.classList.add('hidden');
-    }
-});
-
-// AJAX upload with real-time progress
+// Upload with AJAX
 const form = document.getElementById('upload-form');
-const progressContainer = document.getElementById('progress-container');
 const progressBar = document.getElementById('progress-bar');
+const progressContainer = document.getElementById('progress-container');
+const downloadLink = document.getElementById('download-link');
 
-form.addEventListener('submit', function(e){
+form.addEventListener('submit', function(e) {
     e.preventDefault();
 
-    if(!fileInput.files.length){
+    const file = fileInput.files[0];
+    if (!file) {
         alert("يرجى اختيار ملف");
         return;
     }
 
-    const file = fileInput.files[0];
-    const formData = new FormData(form);
+    const formData = new FormData();
+    formData.append("file", file);
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/upload", true);
-    xhr.responseType = "blob"; // important for download
+    xhr.responseType = "blob";
 
-    // Upload progress
-    xhr.upload.onprogress = function(event){
-        if(event.lengthComputable){
-            const percent = Math.round((event.loaded / event.total) * 100);
-            progressContainer.style.display = "block";
+    progressContainer.style.display = "block";
+
+    xhr.upload.onprogress = function(e) {
+        if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
             progressBar.style.width = percent + "%";
             progressBar.textContent = percent + "%";
         }
     };
 
-    // On complete
-    xhr.onload = function(){
-        if(xhr.status === 200){
-            // download the file
-        const blob = new Blob([xhr.response], { type: "text/vcard" });
-		const url = window.URL.createObjectURL(blob);
-
-	// Open in new tab → Safari handles it
-		window.open(url, "_blank");
-
-            // Show "تم التحويل" after download
+    xhr.onload = function() {
+        if (xhr.status === 200) {
             progressBar.style.width = "100%";
             progressBar.textContent = "تم التحويل";
 
-            // Hide progress after 3 seconds
-            setTimeout(()=>{ progressContainer.style.display="none"; }, 3000);
+            const blob = new Blob([xhr.response], { type: "text/x-vcard" });
+            const url = window.URL.createObjectURL(blob);
+
+            downloadLink.href = url;
+            downloadLink.style.display = "block";
         } else {
-            alert("حدث خطأ أثناء التحويل");
+            alert("حدث خطأ");
         }
     };
 
