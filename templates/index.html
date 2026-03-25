@@ -49,6 +49,7 @@ input, select, button {
     border-radius: 12px;
     border: 1px solid #ddd;
     background: #f9f9fb;
+	margin-bottom: 3px;
 }
 
 /* Spacing */
@@ -127,18 +128,12 @@ button {
 
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
+  <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+   <div class="drop-zone" id="drop-zone">
+    <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
 
-<form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
-        <!-- Upload -->
-        <div class="section">
-            <label>رفع الملف</label>
-            <div class="drop-zone" id="drop-zone">
-                <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
-            </div>
-<!-- Hidden input (required internally) -->
-            <input type="file" id="file-input" name="file" style="display:none;" required>
-     		</div>
-
+<input type="file" name="file" id="file-input" style="display:none;" required>
+</div>
         <!-- Manual Mapping -->
         <div class="section">
             <label>هل ترغب بتحديد عناوين الأعمدة؟</label>
@@ -180,7 +175,17 @@ const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 
-// Drag & drop ONLY
+// Click to open file
+dropZone.addEventListener('click', () => fileInput.click());
+
+// Show file name
+fileInput.addEventListener('change', () => {
+    if(fileInput.files.length > 0){
+        dropZoneText.textContent =  fileInput.files[0].name;
+    }
+});
+
+// Drag & drop
 dropZone.addEventListener('dragover', e => {
     e.preventDefault();
     dropZone.classList.add('dragover');
@@ -193,17 +198,56 @@ dropZone.addEventListener('dragleave', () => {
 dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
-
     fileInput.files = e.dataTransfer.files;
-    dropZoneText.textContent = "📄 " + fileInput.files[0].name;
+    dropZoneText.textContent = fileInput.files[0].name;
 });
 
-// Submit (no AJAX)
+// Gender toggle
+const genderFilter = document.getElementById('gender_filter');
+const genderSelect = document.getElementById('gender_select');
+
+genderFilter.addEventListener('change', () => {
+    if (genderFilter.value === 'yes') {
+        genderSelect.classList.remove('hidden');
+        genderSelect.classList.add('show');
+    } else {
+        genderSelect.classList.remove('show');
+        genderSelect.classList.add('hidden');
+    }
+});
+
+// Manual fields toggle
+const manualSelect = document.getElementById('manual_select');
+const manualFields = document.getElementById('manual-fields');
+
+manualSelect.addEventListener('change', () => {
+    if (manualSelect.value === 'yes') {
+        manualFields.classList.remove('hidden');
+        manualFields.classList.add('show');
+    } else {
+        manualFields.classList.remove('show');
+        manualFields.classList.add('hidden');
+    }
+});
+
+// Progress bar simulation
 const form = document.getElementById('upload-form');
+const progressBar = document.getElementById('progress-bar');
 const progressContainer = document.getElementById('progress-container');
 
 form.addEventListener('submit', () => {
-    progressContainer.style.display = "block";
+    progressContainer.style.display = 'block';
+    let progress = 0;
+
+    const interval = setInterval(() => {
+        progress += 10;
+        progressBar.style.width = progress + "%";
+        progressBar.textContent = progress + "%";
+
+        if(progress >= 100){
+            clearInterval(interval);
+        }
+    }, 200);
 });
 </script>
 
