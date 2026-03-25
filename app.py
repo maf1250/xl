@@ -30,13 +30,13 @@ def split_name(name):
     else:
         return parts[0], " ".join(parts[1:])
 
-def convert_excel_to_vcf(file_path, manual_mapping=None, gender_filter=None):
+def convert_excel_to_vcf(file_path, manual=None, gender_filter=None):
     df = pd.read_excel(file_path, engine='openpyxl')
     df.columns = df.columns.str.strip()
 
     # Default mapping if none provided
     default_mapping = {"اسم الحاج":"Name", "رقم الجوال":"Mobile", "المدينة":"City"}
-    mapping = manual_mapping or default_mapping
+    mapping = manual or default_mapping
     df = df.rename(columns=mapping)
 
     # Filter by gender if requested
