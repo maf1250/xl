@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 
-def process_file(file_path, use_manual, mapping_inputs, use_gender, gender_choice):
+def process_file(file_path, use_manual_mapping, mapping_inputs, use_gender, gender_choice):
     filename, ext = os.path.splitext(file_path)
 
     df = pd.read_excel(file_path, engine='openpyxl')
@@ -16,7 +16,7 @@ def process_file(file_path, use_manual, mapping_inputs, use_gender, gender_choic
         "المدينة": "City"
     }
 
-    if use_manual:
+    if use_manual_mapping:
         column_mapping = mapping_inputs
     else:
         column_mapping = fixed_mapping
