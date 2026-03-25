@@ -30,7 +30,7 @@ h2 {
     background: #fff;
     padding: 15px;
     border-radius: 16px;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
@@ -54,7 +54,7 @@ input, select, button {
 
 /* Spacing */
 .section > *:not(:last-child) {
-    margin-bottom: 10px;
+    margin-bottom: 7px;
 }
 
 /* Button */
@@ -65,7 +65,7 @@ button {
     font-weight: bold;
     cursor: pointer;
 }
-
+button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
 /* Drop zone */
 .drop-zone {
     border: 2px dashed #ccc;
@@ -129,9 +129,11 @@ button {
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
   <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
-   <div class="drop-zone" id="drop-zone">
+         <div class="section">
+        <label>رفع الملف</label>
+			 <div class="drop-zone" id="drop-zone">
     <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
-
+</div>
 <input type="file" name="file" id="file-input" style="display:none;" required>
 </div>
         <!-- Manual Mapping -->
