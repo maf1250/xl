@@ -1,30 +1,104 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, render_template
 import pandas as pd
 import os
 
 app = Flask(__name__)
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route('/')
+def index():
+    return render_template("index.html")  # Your HTML file
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    file = request.files['file']
+    file = request.files.get('file')
+    if not file:
+        return "No file uploaded", 400
+
+    # Save uploaded file
     filename = file.filename
     base_name = os.path.splitext(filename)[0]
-
-    filepath = os.path.join("uploads", filename)
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
     file.save(filepath)
 
-    df = pd.read_excel(filepath, engine='openpyxl')
+    # Read Excel
+    try:
+        df = pd.read_excel(filepath, engine='openpyxl')
+    except Exception as e:
+        return f"Error reading Excel: {e}", 400
 
-    # --- Your processing logic ---
+    # Clean column names
     df.columns = df.columns.str.strip()
-    df = df.rename(columns={"اسم الحاج":"Name","رقم الجوال":"Mobile","المدينة":"City"})
-    df["Mobile"] = df["Mobile"].apply(lambda x: "+966" + str(x).replace("05","") if str(x).startswith("05") else x)
-    df[["FirstName","LastName"]] = df["Name"].apply(lambda n: pd.Series(str(n).split(' ',1) if ' ' in str(n) else [str(n),'']))
-    df["FullName"] = (df["FirstName"] + " " + df["LastName"]).str.strip()
+
+    # Handle manual mapping if provided
+    manual = request.form.get("manual", "no")
+    if manual == "yes":
+        name_col = request.form.get("name_col", "")
+        mobile_col = request.form.get("mobile_col", "")
+        city_col = request.form.get("city_col", "")
+        column_mapping = {}
+        if name_col: column_mapping[name_col] = "Name"
+        if mobile_col: column_mapping[mobile_col] = "Mobile"
+        if city_col: column_mapping[city_col] = "City"
+    else:
+        # Default Arabic mapping
+        column_mapping = {
+            "اسم الحاج": "Name",
+            "رقم الجوال": "Mobile",
+            "المدينة": "City"
+        }
+
+    df = df.rename(columns=column_mapping)
+
+    # Gender filter
+    gender_filter = request.form.get("gender_filter", "no")
+    if gender_filter == "yes":
+        gender_value = request.form.get("gender", "").lower()
+        if gender_value in ["male", "m"]:
+            df = df[df.get("الجنس", "") == "ذكر"]
+        elif gender_value in ["female", "f"]:
+            df = df[df.get("الجنس", "") == "أنثى"]
+
+    # Format mobile numbers
+    def format_mobile(mobile):
+        if pd.isna(mobile):
+            return None
+        mobile = str(mobile).replace(" ", "").replace("-", "")
+        if mobile.startswith("+966"):
+            return mobile
+        elif mobile.startswith("966"):
+            return "+" + mobile
+        elif mobile.startswith("05"):
+            return "+966" + mobile[1:]
+        else:
+            return "+966" + mobile
+
+    df["Mobile"] = df["Mobile"].apply(format_mobile)
+    df = df[df["Mobile"].notna()]
     df = df.drop_duplicates(subset=["Mobile"])
 
-    output_path = os.path.join("uploads", base_name + ".vcf")
-    with open(output_path,"w",encoding="utf-8") as vcf:
+    # Split name
+    def split_name(name):
+        if pd.isna(name):
+            return "", ""
+        parts = str(name).strip().split()
+        if len(parts) == 0:
+            return "", ""
+        elif len(parts) == 1:
+            return parts[0], ""
+        else:
+            return parts[0], " ".join(parts[1:])
+
+    df[["FirstName", "LastName"]] = df["Name"].apply(lambda x: pd.Series(split_name(x)))
+    df["FullName"] = (df["FirstName"] + " " + df["LastName"]).str.strip()
+
+    # Sort alphabetically
+    df = df.sort_values(by="FullName", ascending=True)
+
+    # Create VCF
+    output_path = os.path.join(UPLOAD_FOLDER, base_name + ".vcf")
+    with open(output_path, "w", encoding="utf-8") as vcf:
         for _, row in df.iterrows():
             vcf.write("BEGIN:VCARD\n")
             vcf.write("VERSION:3.0\n")
@@ -34,4 +108,13 @@ def upload():
             vcf.write(f"TEL;TYPE=CELL:{row['Mobile']}\n")
             vcf.write("END:VCARD\n")
 
-    return send_file(output_path, as_attachment=True, download_name=base_name+".vcf", mimetype="text/vcard")
+    # Send file for download (AJAX)
+    return send_file(
+        output_path,
+        as_attachment=True,
+        download_name=base_name + ".vcf",
+        mimetype="text/vcard"
+    )
+
+if __name__ == "__main__":
+    app.run(debug=True)
