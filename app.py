@@ -140,19 +140,19 @@ def upload():
 
             vcf.write("BEGIN:VCARD\n")
             vcf.write("VERSION:3.0\n")
-            vcf.write(f"N:{Last_Name};{First_Name};;;\n")
+            vcf.write(f"N:{Last_Name};{FirstName};;;\n")
             vcf.write(f"FN:{Full_Name}\n")
             vcf.write(f"ORG:{Company}\n")
             vcf.write(f"TEL;TYPE=CELL:{Mobile}\n")
             vcf.write("END:VCARD\n")
 
-    # =========================
-    # RETURN FILE (Safari Preview Mode)
-    # =========================
+  )
+
+
     return send_file(
         output_path,
-        as_attachment=False,   
-        mimetype="text/x-vcard"
+        as_attachment=true,   
+        
     )
 
 
