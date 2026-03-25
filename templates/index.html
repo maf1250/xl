@@ -172,36 +172,23 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
     </form>
 </div>
 
+
 <script>
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
-const dropZoneText = document.getElementById('drop-zone-text');
+const dropText = dropZone.querySelector("#drop-zone-text");
 
-// Click to open file
-dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener("click",()=>fileInput.click());
 
-// Show file name
-fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent =  fileInput.files[0].name;
-    }
-});
+fileInput.addEventListener("change",()=>dropZone.textContent = fileInput.files[0].name);
 
-// Drag & drop
-dropZone.addEventListener('dragover', e => {
+dropZone.addEventListener("dragover",e=>{e.preventDefault(); dropZone.classList.add("dragover");});
+dropZone.addEventListener("dragleave",()=>dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop",e=>{
     e.preventDefault();
-    dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', () => {
-    dropZone.classList.remove('dragover');
-});
-
-dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
+    dropZone.classList.remove("dragover");
     fileInput.files = e.dataTransfer.files;
-    dropZoneText.textContent = fileInput.files[0].name;
+    dropZone.textContent = fileInput.files[0].name;
 });
 
 // Gender toggle
@@ -232,25 +219,10 @@ manualSelect.addEventListener('change', () => {
     }
 });
 
-// Progress bar simulation
+
+// Form submit - native download
 const form = document.getElementById('upload-form');
-const progressBar = document.getElementById('progress-bar');
-const progressContainer = document.getElementById('progress-container');
-
-form.addEventListener('submit', () => {
-    progressContainer.style.display = 'block';
-    let progress = 0;
-
-    const interval = setInterval(() => {
-        progress += 10;
-        progressBar.style.width = progress + "%";
-        progressBar.textContent = progress + "%";
-
-        if(progress >= 100){
-            clearInterval(interval);
-        }
-    }, 200);
-});
+form.addEventListener("submit",()=>{document.getElementById("progress-container").style.display="block";});
 </script>
 
 </body>
