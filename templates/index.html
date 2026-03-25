@@ -19,32 +19,8 @@ html, body {
     max-width: 480px;
     margin: auto;
     padding: 20px;
-
-}
-.success {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: #f2f2f7;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 999;
-    text-align: center;
 }
 
-.success h3 {
-    font-size: 22px;
-    margin-bottom: 10px;
-}
-
-.success p {
-    color: #666;
-    margin-bottom: 20px;
-}
 h2 {
     text-align: center;
 }
@@ -120,20 +96,23 @@ button {
 }
     #manual-fields > *:not(:last-child) {
         margin-bottom: 3px;
+	}
 /* Animations */
 
-    }
 .hidden {
     max-height: 0;
     overflow: hidden;
     opacity: 0;
     transition: all 0.5s ease;
-pointer-events: none;
+	pointer-events: none;
+	padding: 0;
+    margin: 0;
+    border: none;
 }
 .show {
     	max-height: 200px;
     	opacity: 1;
-	transition: all 0.5s ease;
+		transition: all 0.5s ease;
 }
 </style>
 </head>
@@ -160,12 +139,10 @@ pointer-events: none;
 
         <!-- Manual Mapping -->
         <div class="section">
-              <label>كيف ترغب بتحديد عنوانين الأعمدة؟</label>
-
-
+              <label>هل ترغب بتحديد عنوانين الأعمدة؟</label>
             <select name="manual" id="manual_select">
-                <option value="no" selected>تلقائيًا</option>
-                <option value="yes">يدويًا</option>
+                <option value="no" selected>لا</option>
+                <option value="yes">نعم</option>
             </select>
 
             <div id="manual-fields" class="hidden">
@@ -200,13 +177,7 @@ pointer-events: none;
     </form>
 </div>
 
-<!-- Success Screen -->
-<div id="success-screen" class="success hidden">
-    <h3>✅ تم التحويل بنجاح</h3>
-    <p>تم إنشاء الملف بنجاح</p>
-    <button onclick="downloadFile()">تحميل الملف</button>
-    <button onclick="resetApp()">ملف جديد</button>
-</div>
+
 <script>
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
@@ -259,62 +230,13 @@ const form = document.getElementById('upload-form');
 const progressBar = document.getElementById('progress-bar');
 const progressContainer = document.getElementById('progress-container');
 
-form.addEventListener('submit', function(e) {
-    e.preventDefault();
-
-    const file = fileInput.files[0];
-    if (!file) return alert("يرجى اختيار ملف");
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    progressContainer.style.display = 'block';
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/upload", true);
-
-    xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-            let percent = Math.round((e.loaded / e.total) * 100);
-            progressBar.style.width = percent + "%";
-            progressBar.textContent = percent + "%";
-        }
-    };
-
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            const blob = new Blob([xhr.response], { type: "text/vcard" });
-
-            const originalName = file.name.replace(/\.[^/.]+$/, "");
-            const url = window.URL.createObjectURL(blob);
-
-            window.downloadUrl = url;
-            window.downloadName = originalName + ".vcf";
-
-            document.getElementById('success-screen').classList.remove('hidden');
-        } else {
-            alert("حدث خطأ");
-        }
-    };
-
-    xhr.responseType = "blob";
-    xhr.send(formData);
+// download
+document.querySelector("form").addEventListener("submit", () => {
+    document.getElementById("progress-container").style.display = "block";
+    document.getElementById("progress-bar").style.width = "100%";
+    document.getElementById("progress-bar").textContent = "قيد التحويل...";
 });
 
-// Download
-function downloadFile() {
-    const a = document.createElement("a");
-    a.href = window.downloadUrl;
-    a.download = window.downloadName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-}
-
-// Reset
-function resetApp() {
-    location.reload();
-}
 </script>
 
 </body>
