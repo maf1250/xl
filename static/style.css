@@ -111,3 +111,26 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
     	opacity: 1;
 		transition: all 0.5s ease;
 }
+#toast {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 12px 20px;
+    border-radius: 80px;
+    font-size: 14px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s, bottom 0.3s;
+    z-index: 9999;
+}
+
+#toast.show {
+    opacity: 1;
+    bottom: 40px;
+}
+
+#toast.success { background: #28a745; }
+#toast.error { background: #dc3545; }
