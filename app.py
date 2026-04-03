@@ -29,7 +29,7 @@ def upload():
 
     output = process_file(filepath, use_manual, mapping_inputs, use_gender, gender)
 
-    return send_file(output, as_attachment=True)
+    return send_file(output, as_attachment=False)
 
 if __name__ == "__main__":
     app.run(debug=True)
