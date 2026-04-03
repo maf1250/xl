@@ -57,13 +57,13 @@ genderFilter.addEventListener('change', () => {
     if (genderFilter.value === 'yes') {
         genderSelect.classList.remove('hidden');
         genderSelect.classList.add('show');
-        genderField.classList.remove('hidden');
-        genderField.classList.add('show');
+     //   genderField.classList.remove('hidden');
+      //  genderField.classList.add('show');
     } else {
         genderSelect.classList.remove('show');
         genderSelect.classList.add('hidden');
-        genderField.classList.remove('show');
-        genderField.classList.add('hidden');
+   //     genderField.classList.remove('show');
+     //   genderField.classList.add('hidden');
     }
 });
 
@@ -111,13 +111,11 @@ form.addEventListener('submit', function (e) {
 
     // ===== Response =====
    xhr.onload = function () {
-    if (xhr.status === 200) {
-
-        // إظهار النص بعد النجاح
+               // إظهار النص بعد النجاح
         const hiddenText = document.getElementById('hiddenText');
         hiddenText.classList.remove('hidden');
-        hiddenText.classList.add('showT');
-
+        hiddenText.classList.add('showText');
+    if (xhr.status === 200) {
         const blob = new Blob([xhr.response], { type: "application/octet-stream" });
         const link = document.createElement('a');
         link.href = window.URL.createObjectURL(blob);
