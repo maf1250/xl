@@ -110,19 +110,25 @@ form.addEventListener('submit', function (e) {
     });
 
     // ===== Response =====
-    xhr.onload = function () {
-        if (xhr.status === 200) {
-            const blob = new Blob([xhr.response], { type: "application/octet-stream" });
-            const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = vcfFileName;
-            link.click();
+   xhr.onload = function () {
+    if (xhr.status === 200) {
 
-            showToast("تم التحويل بنجاح!", "success", 5000);
-        } else {
-            showToast("حدث خطأ أثناء التحويل", "error", 5000);
-        }
-    };
+        // إظهار النص بعد النجاح
+        const hiddenText = document.getElementById('hiddenText');
+        hiddenText.classList.remove('hidden');
+        hiddenText.classList.add('showT');
+
+        const blob = new Blob([xhr.response], { type: "application/octet-stream" });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = vcfFileName;
+        link.click();
+
+        showToast("تم التحويل بنجاح!", "success", 5000);
+    } else {
+        showToast("حدث خطأ أثناء التحويل", "error", 5000);
+    }
+};
 
     xhr.onerror = function () {
         showToast("فشل الاتصال بالسيرفر", "error", 5000);
@@ -131,8 +137,3 @@ form.addEventListener('submit', function (e) {
     xhr.responseType = 'blob';
     xhr.send(formData);
 });
-// ===== Show Text after Submittion =====
-function toggleText(event) {
-  event.preventDefault(); // prevents form reload
-  document.getElementById('hiddenText').classList.toggle('showT');
-}
