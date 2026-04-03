@@ -1,11 +1,22 @@
+// ===== Elements =====
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const dropZoneText = document.getElementById('drop-zone-text');
 const form = document.getElementById('upload-form');
-const progressContainer = document.getElementById('progress-container');
-const progressBar = document.getElementById('progress-bar');
 
-// Drag & Drop
+// ===== Toast Function =====
+function showToast(message, type = "") {
+    const toast = document.getElementById("toast");
+
+    toast.textContent = message;
+    toast.className = "show " + type;
+
+    setTimeout(() => {
+        toast.className = toast.className.replace("show", "");
+    }, 2500);
+}
+
+// ===== Drag & Drop =====
 dropZone.addEventListener('click', () => fileInput.click());
 
 dropZone.addEventListener('dragover', e => {
@@ -22,35 +33,41 @@ dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
     fileInput.files = e.dataTransfer.files;
-    if(fileInput.files.length > 0){
+
+    if (fileInput.files.length > 0) {
         dropZoneText.textContent = fileInput.files[0].name;
     }
 });
 
-// Show selected file when using file input
+// ===== File Input Change =====
 fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent =  fileInput.files[0].name;
+    if (fileInput.files.length > 0) {
+        dropZoneText.textContent = fileInput.files[0].name;
     } else {
         dropZoneText.textContent = "اسحب وافلت ملف الاكسل هنا\nأو اضغط لاختياره";
     }
 });
 
-// Gender toggle
+// ===== Gender Toggle =====
 const genderFilter = document.getElementById('gender_filter');
 const genderSelect = document.getElementById('gender_select');
+const genderField = document.getElementById('gender-field');
 
 genderFilter.addEventListener('change', () => {
     if (genderFilter.value === 'yes') {
         genderSelect.classList.remove('hidden');
         genderSelect.classList.add('show');
+        genderField.classList.remove('hidden');
+        genderField.classList.add('show');
     } else {
         genderSelect.classList.remove('show');
         genderSelect.classList.add('hidden');
+        genderField.classList.remove('show');
+        genderField.classList.add('hidden');
     }
 });
 
-// Manual fields toggle
+// ===== Manual Fields Toggle =====
 const manualSelect = document.getElementById('manual_select');
 const manualFields = document.getElementById('manual-fields');
 
@@ -64,12 +81,14 @@ manualSelect.addEventListener('change', () => {
     }
 });
 
-
-// Submit with AJAX
-form.addEventListener('submit', function(e){
+// ===== Submit with AJAX =====
+form.addEventListener('submit', function (e) {
     e.preventDefault();
 
-    if(fileInput.files.length === 0) return;
+    if (fileInput.files.length === 0) {
+        showToast("الرجاء اختيار ملف أولاً", "error", 5000);
+        return;
+    }
 
     const formData = new FormData(form);
     const originalFileName = fileInput.files[0].name;
@@ -78,26 +97,35 @@ form.addEventListener('submit', function(e){
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/upload', true);
 
-    xhr.upload.addEventListener('progress', function(e){
-        if(e.lengthComputable){
+    // ===== Upload Progress =====
+    xhr.upload.addEventListener('progress', function (e) {
+        if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
-            progressContainer.style.display = 'block';
-            progressBar.style.width = percent + '%';
-            progressBar.textContent = percent + '%';
+
+            // لتجنب الإزعاج: يظهر كل 10%
+            if (percent % 10 === 0) {
+                showToast("جاري الرفع: " + percent + "%");
+            }
         }
     });
 
-    xhr.onload = function(){
-        if(xhr.status === 200){
-            const blob = new Blob([xhr.response], {type: "application/octet-stream"});
+    // ===== Response =====
+    xhr.onload = function () {
+        if (xhr.status === 200) {
+            const blob = new Blob([xhr.response], { type: "application/octet-stream" });
             const link = document.createElement('a');
             link.href = window.URL.createObjectURL(blob);
             link.download = vcfFileName;
             link.click();
-            progressBar.textContent = "✅ تم التحويل!";
+
+            showToast("تم التحويل بنجاح!", "success", 5000);
         } else {
-            progressBar.textContent = "❌ حدث خطأ!";
+            showToast("حدث خطأ أثناء التحويل", "error", 5000);
         }
+    };
+
+    xhr.onerror = function () {
+        showToast("فشل الاتصال بالسيرفر", "error", 5000);
     };
 
     xhr.responseType = 'blob';
