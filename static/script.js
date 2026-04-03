@@ -97,39 +97,55 @@ form.addEventListener('submit', function (e) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/upload', true);
 
-    // ===== Upload Progress =====
+    let uploadFinished = false;
+
+    // ===== Upload Progress (0 → 50%) =====
     xhr.upload.addEventListener('progress', function (e) {
         if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 100);
-
-            // لتجنب الإزعاج: يظهر كل 10%
-            if (percent % 10 === 0) {
-                showToast("جاري الرفع: " + percent + "%");
-            }
+            const percent = Math.round((e.loaded / e.total) * 50);
+            showToast("جاري الرفع: " + percent + "%");
         }
     });
 
+    // ===== بعد انتهاء الرفع =====
+    xhr.upload.addEventListener('load', function () {
+        uploadFinished = true;
+        showToast("50% تم رفع الملف، جاري المعالجة...");
+    });
+
+    // ===== معالجة (Fake Progress 50 → 90%) =====
+    let fakeProgress = 50;
+    const interval = setInterval(() => {
+        if (uploadFinished && fakeProgress < 90) {
+            fakeProgress += 5;
+            showToast("جاري المعالجة: " + fakeProgress + "%");
+        }
+    }, 1000);
+
     // ===== Response =====
-   xhr.onload = function () {
-               // إظهار النص بعد النجاح
+    xhr.onload = function () {
+        clearInterval(interval);
+
         const hiddenText = document.getElementById('hiddenText');
         hiddenText.classList.remove('hidden');
         hiddenText.classList.add('showText');
-    if (xhr.status === 200) {
-        const blob = new Blob([xhr.response], { type: "application/octet-stream" });
-        const link = document.createElement('a');
-        link.href = window.URL.createObjectURL(blob);
-        link.download = vcfFileName;
-        link.click();
 
-        showToast("تم التحويل بنجاح!", "success", 5000);
-    } else {
-        showToast("حدث خطأ أثناء التحويل", "error", 5000);
-    }
-};
+        if (xhr.status === 200) {
+            const blob = new Blob([xhr.response], { type: "application/octet-stream" });
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = vcfFileName;
+            link.click();
+
+            showToast("100% تم التحويل بنجاح!", "success", 5000);
+        } else {
+            showToast("حدث خطأ أثناء التحويل", "error", 5000);
+        }
+    };
 
     xhr.onerror = function () {
-        showToast("فشل الاتصال بالسيرفر", "error", 5000);
+        clearInterval(interval);
+        showToast("فشل الاتصال بالسيرفر", "error");
     };
 
     xhr.responseType = 'blob';
