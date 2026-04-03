@@ -4,129 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>تحويل ملف الاكسل إلى جهات اتصال</title>
-
+<link rel="stylesheet" href="/style.css">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap" rel="stylesheet">
-
-<style>
-html, body {
-    margin: 0;
-    padding: 0;
-    font-family: 'Cairo', sans-serif;
-    background: #f2f2f7;
-}
-
-.container {
-    max-width: 480px;
-    margin: auto;
-    padding: 20px;
-}
-
-h2 {
-    text-align: center;
-	font-size: 18px;
-}
-
-/* Section */
-.section {
-    background: #fff;
-    padding: 15px;
-    border-radius: 16px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-}
-
-.section label {
-    display: block;
-    margin-bottom: 8px;
-    color: #666;
-}
-
-/* Inputs */
-input, select, button {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 14px;
-    font-size: 16px;
-    border-radius: 12px;
-    border: 1px solid #ddd;
-    background: #f9f9fb;
-	margin-bottom: 3px;
-}
-
-/* Spacing */
-.section > *:not(:last-child) {
-    margin-bottom: 7px;
-}
-
-/* Button */
-button {
-    background: linear-gradient(135deg, #4CAF50, #43a047);
-    color: white;
-    border: none;
-    font-weight: bold;
-    cursor: pointer;
-   }
-button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
-/* Drop zone */
-.drop-zone {
-    border: 2px dashed #ccc;
-    border-radius: 16px;
-    padding: 25px;
-    text-align: center;
-    background: #fafafa;
-}
-
-.drop-zone.dragover {
-    border-color: #4CAF50;
-    background: #e8f5e9;
-}
-
-/* Progress bar */
-#progress-container {
-    display: none;
-    background: #eee;
-    border-radius: 70px;
-    overflow: hidden;
-    margin-bottom: 10px;
-}
-
-#progress-bar {
-    height: 30px;
-    width: 0%;
-    background: #4CAF50;
-    color: white;
-    text-align: center;
-    line-height: 30px;
-}
-
-/* Manual fields toggle */
-#manual-fields.hidden, #gender_select.hidden {
-    display: none;
-}
-#manual-fields.show, #gender_select.show {
-    display: block;
-}
-    .hidden {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: all 0.5s ease;
-	pointer-events: none;
-	padding: 0;
-    margin: 0;
-    border: none;
- display: none;
-}
-.show {
-    	max-height: 200px;
-    	opacity: 1;
-		transition: all 0.5s ease;
-}
-</style>
 </head>
-
 <body>
-
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
   <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
@@ -137,8 +18,8 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
 </div>
 <input type="file" name="file" id="file-input" style="display:none;" required>
 </div>
-        <!-- Manual Mapping -->
-        <div class="section">
+    
+	  <div class="section">
             <label>هل ترغب بتحديد عناوين الأعمدة؟</label>
             <select name="manual" id="manual_select">
                 <option value="no" selected>لا</option>
@@ -151,7 +32,6 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
             </div>
         </div>
 
-        <!-- Gender -->
         <div class="section">
             <label>هل ترغب بالتصفية حسب الجنس؟</label>
             <select name="gender_filter" id="gender_filter">
@@ -164,7 +44,7 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
             </select>
         </div>
 
-        <!-- Progress -->
+
         <div id="progress-container">
             <div id="progress-bar">0%</div>
         </div>
@@ -172,113 +52,6 @@ button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
         <button type="submit">تحويل</button>
     </form>
 </div>
-
-<script>
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const dropZoneText = document.getElementById('drop-zone-text');
-const form = document.getElementById('upload-form');
-const progressContainer = document.getElementById('progress-container');
-const progressBar = document.getElementById('progress-bar');
-
-// Drag & Drop
-dropZone.addEventListener('click', () => fileInput.click());
-
-dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dropZone.classList.add('dragover');
-});
-
-dropZone.addEventListener('dragleave', e => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-});
-
-dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dropZone.classList.remove('dragover');
-    fileInput.files = e.dataTransfer.files;
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent = fileInput.files[0].name;
-    }
-});
-
-// Show selected file when using file input
-fileInput.addEventListener('change', () => {
-    if(fileInput.files.length > 0){
-        dropZoneText.textContent =  fileInput.files[0].name;
-    } else {
-        dropZoneText.textContent = "اسحب وافلت ملف الاكسل هنا\nأو اضغط لاختياره";
-    }
-});
-
-// Gender toggle
-const genderFilter = document.getElementById('gender_filter');
-const genderSelect = document.getElementById('gender_select');
-
-genderFilter.addEventListener('change', () => {
-    if (genderFilter.value === 'yes') {
-        genderSelect.classList.remove('hidden');
-        genderSelect.classList.add('show');
-    } else {
-        genderSelect.classList.remove('show');
-        genderSelect.classList.add('hidden');
-    }
-});
-
-// Manual fields toggle
-const manualSelect = document.getElementById('manual_select');
-const manualFields = document.getElementById('manual-fields');
-
-manualSelect.addEventListener('change', () => {
-    if (manualSelect.value === 'yes') {
-        manualFields.classList.remove('hidden');
-        manualFields.classList.add('show');
-    } else {
-        manualFields.classList.remove('show');
-        manualFields.classList.add('hidden');
-    }
-});
-
-
-// Submit with AJAX
-form.addEventListener('submit', function(e){
-    e.preventDefault();
-
-    if(fileInput.files.length === 0) return;
-
-    const formData = new FormData(form);
-    const originalFileName = fileInput.files[0].name;
-    const vcfFileName = originalFileName.replace(/\.[^/.]+$/, ".vcf");
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload', true);
-
-    xhr.upload.addEventListener('progress', function(e){
-        if(e.lengthComputable){
-            const percent = Math.round((e.loaded / e.total) * 100);
-            progressContainer.style.display = 'block';
-            progressBar.style.width = percent + '%';
-            progressBar.textContent = percent + '%';
-        }
-    });
-
-    xhr.onload = function(){
-        if(xhr.status === 200){
-            const blob = new Blob([xhr.response], {type: "application/octet-stream"});
-            const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = vcfFileName;
-            link.click();
-            progressBar.textContent = "✅ تم التحويل!";
-        } else {
-            progressBar.textContent = "❌ حدث خطأ!";
-        }
-    };
-
-    xhr.responseType = 'blob';
-    xhr.send(formData);
-});
-</script>
+<script src="/script.js"></script>
 </body>
 </html>
