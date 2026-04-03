@@ -5,7 +5,7 @@ const dropZoneText = document.getElementById('drop-zone-text');
 const form = document.getElementById('upload-form');
 
 // ===== Toast Function =====
-function showToast(message, type = "") {
+function showToast(message, type = "", duration = 5000) {
     const toast = document.getElementById("toast");
 
     toast.textContent = message;
@@ -13,7 +13,7 @@ function showToast(message, type = "") {
 
     setTimeout(() => {
         toast.className = toast.className.replace("show", "");
-    }, 5000);
+    }, duration);
 }
 
 // ===== Drag & Drop =====
@@ -97,55 +97,41 @@ form.addEventListener('submit', function (e) {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/upload', true);
 
-    let uploadFinished = false;
-
-    // ===== Upload Progress (0 → 50%) =====
+    // ===== Upload Progress =====
+     let lastShown = 0;
     xhr.upload.addEventListener('progress', function (e) {
         if (e.lengthComputable) {
-            const percent = Math.round((e.loaded / e.total) * 50);
-            showToast("جاري الرفع: " + percent + "%");
+            const percent = Math.round((e.loaded / e.total) * 100);
+
+       
+    if ((percent - lastShown >= 2 || percent === 100) && percent !== lastShown) {
+    lastShown = percent;
+    showToast("جاري الرفع: " + percent + "%");
+}
         }
     });
-
-    // ===== بعد انتهاء الرفع =====
-    xhr.upload.addEventListener('load', function () {
-        uploadFinished = true;
-        showToast("50% تم رفع الملف، جاري المعالجة...");
-    });
-
-    // ===== معالجة (Fake Progress 50 → 90%) =====
-    let fakeProgress = 50;
-    const interval = setInterval(() => {
-        if (uploadFinished && fakeProgress < 90) {
-            fakeProgress += 5;
-            showToast("جاري المعالجة: " + fakeProgress + "%");
-        }
-    }, 1000);
 
     // ===== Response =====
-    xhr.onload = function () {
-        clearInterval(interval);
-
+   xhr.onload = function () {
+               // إظهار النص بعد النجاح
         const hiddenText = document.getElementById('hiddenText');
         hiddenText.classList.remove('hidden');
         hiddenText.classList.add('showText');
+    if (xhr.status === 200) {
+        const blob = new Blob([xhr.response], { type: "application/octet-stream" });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = vcfFileName;
+        link.click();
 
-        if (xhr.status === 200) {
-            const blob = new Blob([xhr.response], { type: "application/octet-stream" });
-            const link = document.createElement('a');
-            link.href = window.URL.createObjectURL(blob);
-            link.download = vcfFileName;
-            link.click();
-
-            showToast("100% تم التحويل بنجاح!", "success", 5000);
-        } else {
-            showToast("حدث خطأ أثناء التحويل", "error", 5000);
-        }
-    };
+        showToast("تم التحويل بنجاح!", "success", 5000);
+    } else {
+        showToast("حدث خطأ أثناء التحويل", "error", 5000);
+    }
+};
 
     xhr.onerror = function () {
-        clearInterval(interval);
-        showToast("فشل الاتصال بالسيرفر", "error");
+        showToast("فشل الاتصال بالسيرفر", "error", 5000);
     };
 
     xhr.responseType = 'blob';
