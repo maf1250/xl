@@ -131,3 +131,8 @@ form.addEventListener('submit', function (e) {
     xhr.responseType = 'blob';
     xhr.send(formData);
 });
+// ===== Show Text after Submittion =====
+function toggleText(event) {
+  event.preventDefault(); // prevents form reload
+  document.getElementById('hiddenText').classList.toggle('showT');
+}
