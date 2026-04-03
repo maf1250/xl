@@ -13,7 +13,7 @@ function showToast(message, type = "") {
 
     setTimeout(() => {
         toast.className = toast.className.replace("show", "");
-    }, 2500);
+    }, 5000);
 }
 
 // ===== Drag & Drop =====
