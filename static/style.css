@@ -1,62 +1,113 @@
-body {
-    font-family: Arial;
-    background: #f5f7fa;
+html, body {
     margin: 0;
-    padding: 20px;
+    padding: 0;
+    font-family: 'Cairo', sans-serif;
+    background: #f2f2f7;
 }
 
 .container {
-    max-width: 500px;
+    max-width: 480px;
     margin: auto;
+    padding: 20px;
+}
+h2 {
     text-align: center;
+	font-size: 18px;
 }
 
-#drop-area {
-    border: 2px dashed #007bff;
-    padding: 30px;
-    border-radius: 10px;
-    background: white;
-    cursor: pointer;
+/* Section */
+.section {
+    background: #fff;
+    padding: 15px;
+    border-radius: 16px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 
-#file-list {
-    list-style: none;
-    padding: 0;
+.section label {
+    display: block;
+    margin-bottom: 8px;
+    color: #666;
 }
 
-#file-list li {
-    background: white;
-    margin: 10px 0;
-    padding: 10px;
-    border-radius: 8px;
-    display: flex;
-    justify-content: space-between;
-}
-
-button {
-    margin-top: 20px;
-    padding: 10px 20px;
-    border: none;
-    background: #007bff;
-    color: white;
-    border-radius: 8px;
+/* Inputs */
+input, select, button {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
     font-size: 16px;
+    border-radius: 12px;
+    border: 1px solid #ddd;
+    background: #f9f9fb;
+	margin-bottom: 3px;
 }
 
-#progress {
-    margin-top: 20px;
-    height: 10px;
-    background: #ddd;
-    border-radius: 5px;
+/* Spacing */
+.section > *:not(:last-child) {
+    margin-bottom: 7px;
 }
 
-.bar {
-    height: 100%;
-    width: 0%;
-    background: #28a745;
-    border-radius: 5px;
+/* Button */
+button {
+    background: linear-gradient(135deg, #4CAF50, #43a047);
+    color: white;
+    border: none;
+    font-weight: bold;
+    cursor: pointer;
+   }
+button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
+/* Drop zone */
+.drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 16px;
+    padding: 25px;
+    text-align: center;
+    background: #fafafa;
 }
 
-.hidden {
+.drop-zone.dragover {
+    border-color: #4CAF50;
+    background: #e8f5e9;
+}
+
+/* Progress bar */
+#progress-container {
     display: none;
+    background: #eee;
+    border-radius: 70px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+#progress-bar {
+    height: 30px;
+    width: 0%;
+    background: #4CAF50;
+    color: white;
+    text-align: center;
+    line-height: 30px;
+}
+
+/* Manual fields toggle */
+#manual-fields.hidden, #gender_select.hidden {
+    display: none;
+}
+#manual-fields.show, #gender_select.show {
+    display: block;
+}
+    .hidden {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: all 0.5s ease;
+	pointer-events: none;
+	padding: 0;
+    margin: 0;
+    border: none;
+ display: none;
+}
+.show {
+    	max-height: 200px;
+    	opacity: 1;
+		transition: all 0.5s ease;
 }
