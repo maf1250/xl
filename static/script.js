@@ -102,11 +102,9 @@ form.addEventListener('submit', function (e) {
     xhr.upload.addEventListener('progress', function (e) {
         if (e.lengthComputable) {
             const percent = Math.round((e.loaded / e.total) * 100);
-
-       
-    if ((percent - lastShown >= 2 || percent === 100) && percent !== lastShown) {
+        if ((percent - lastShown >= 5 || percent === 100) && percent !== lastShown) {
     lastShown = percent;
-    showToast("جاري الرفع: " + percent + "%");
+    showToast("جار التحويل");
 }
         }
     });
@@ -123,7 +121,6 @@ form.addEventListener('submit', function (e) {
         link.href = window.URL.createObjectURL(blob);
         link.download = vcfFileName;
         link.click();
-
         showToast("تم التحويل بنجاح!", "success", 5000);
     } else {
         showToast("حدث خطأ أثناء التحويل", "error", 5000);
@@ -134,6 +131,6 @@ form.addEventListener('submit', function (e) {
         showToast("فشل الاتصال بالسيرفر", "error", 5000);
     };
 
-    xhr.responseType = 'blob';
-    xhr.send(formData);
-});
+//    xhr.responseType = 'blob';
+//    xhr.send(formData);
+//});
