@@ -18,7 +18,6 @@
 </div>
 <input type="file" name="file" id="file-input" style="display:none;" required>
 </div>
-    
 	  <div class="section">
             <label>هل ترغب بتحديد عناوين الأعمدة؟</label>
             <select name="manual" id="manual_select">
@@ -31,7 +30,6 @@
                 <input type="text" name="city_col" placeholder="اكتب عنوان عمود المدينة">
             </div>
         </div>
-
         <div class="section">
             <label>هل ترغب بالتصفية حسب الجنس؟</label>
             <select name="gender_filter" id="gender_filter">
@@ -43,12 +41,10 @@
                 <option value="female">أنثى</option>
             </select>
         </div>
-
-
         <div id="progress-container">
             <div id="progress-bar">0%</div>
         </div>
-		<button onclick="document.getElementById('hiddenText').classList.toggle('show')" type="submit">تحويل</button>
+<button onclick="toggleText(event)" type="submit">تحويل</button>
 	  <p id="hiddenText" class="hidden">
 يمكن لمستخدمي أجهزة الآيفون تنزيل جميع جهات الاتصال دفعة واحدة من خلال خيار المشاركة وإرسالها عبر تطبيق البريد الإلكتروني الرسمي. كما يمكن مشاركة الملف مع مستخدمين آخرين عبر تطبيق الواتساب، مما يتيح لهم عرض كافة جهات الاتصال بسهولة.</p>
     </form>
