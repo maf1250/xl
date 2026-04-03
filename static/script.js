@@ -131,6 +131,6 @@ form.addEventListener('submit', function (e) {
         showToast("فشل الاتصال بالسيرفر", "error", 5000);
     };
 
-//    xhr.responseType = 'blob';
-//    xhr.send(formData);
-//});
+    xhr.responseType = 'blob';
+    xhr.send(formData);
+});
