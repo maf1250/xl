@@ -1,109 +1,105 @@
-let files = [];
-const dropArea = document.getElementById("drop-area");
-const fileElem = document.getElementById("fileElem");
-const fileList = document.getElementById("file-list");
-const mergeBtn = document.getElementById("mergeBtn");
-const progress = document.getElementById("progress");
-const bar = document.querySelector(".bar");
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const dropZoneText = document.getElementById('drop-zone-text');
+const form = document.getElementById('upload-form');
+const progressContainer = document.getElementById('progress-container');
+const progressBar = document.getElementById('progress-bar');
 
-// ===== Drag & Drop / File Upload =====
-dropArea.addEventListener("click", () => fileElem.click());
-fileElem.addEventListener("change", (e) => handleFiles(e.target.files));
+// Drag & Drop
+dropZone.addEventListener('click', () => fileInput.click());
 
-dropArea.addEventListener("dragover", (e) => e.preventDefault());
-dropArea.addEventListener("drop", (e) => {
+dropZone.addEventListener('dragover', e => {
     e.preventDefault();
-    handleFiles(e.dataTransfer.files);
+    dropZone.classList.add('dragover');
 });
 
-function handleFiles(selectedFiles) {
-    for (let file of selectedFiles) files.push(file);
-    renderList();
-}
+dropZone.addEventListener('dragleave', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+});
 
-// ===== Render File List with Move Up / Move Down =====
-function renderList() {
-    fileList.innerHTML = "";
-    files.forEach((file, index) => {
-        let li = document.createElement("li");
-        li.innerHTML = `
-            ${file.name} 
-            <div style="display:inline-flex; gap:5px">
-                <button onclick="moveUp(${index})">⬆️</button>
-                <button onclick="moveDown(${index})">⬇️</button>
-                <button onclick="removeFile(${index})">❌</button>
-            </div>
-        `;
-        fileList.appendChild(li);
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    fileInput.files = e.dataTransfer.files;
+    if(fileInput.files.length > 0){
+        dropZoneText.textContent = fileInput.files[0].name;
+    }
+});
+
+// Show selected file when using file input
+fileInput.addEventListener('change', () => {
+    if(fileInput.files.length > 0){
+        dropZoneText.textContent =  fileInput.files[0].name;
+    } else {
+        dropZoneText.textContent = "اسحب وافلت ملف الاكسل هنا\nأو اضغط لاختياره";
+    }
+});
+
+// Gender toggle
+const genderFilter = document.getElementById('gender_filter');
+const genderSelect = document.getElementById('gender_select');
+
+genderFilter.addEventListener('change', () => {
+    if (genderFilter.value === 'yes') {
+        genderSelect.classList.remove('hidden');
+        genderSelect.classList.add('show');
+    } else {
+        genderSelect.classList.remove('show');
+        genderSelect.classList.add('hidden');
+    }
+});
+
+// Manual fields toggle
+const manualSelect = document.getElementById('manual_select');
+const manualFields = document.getElementById('manual-fields');
+
+manualSelect.addEventListener('change', () => {
+    if (manualSelect.value === 'yes') {
+        manualFields.classList.remove('hidden');
+        manualFields.classList.add('show');
+    } else {
+        manualFields.classList.remove('show');
+        manualFields.classList.add('hidden');
+    }
+});
+
+
+// Submit with AJAX
+form.addEventListener('submit', function(e){
+    e.preventDefault();
+
+    if(fileInput.files.length === 0) return;
+
+    const formData = new FormData(form);
+    const originalFileName = fileInput.files[0].name;
+    const vcfFileName = originalFileName.replace(/\.[^/.]+$/, ".vcf");
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/upload', true);
+
+    xhr.upload.addEventListener('progress', function(e){
+        if(e.lengthComputable){
+            const percent = Math.round((e.loaded / e.total) * 100);
+            progressContainer.style.display = 'block';
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = percent + '%';
+        }
     });
-}
 
-// ===== Move File Up / Down =====
-function moveUp(index) {
-    if (index === 0) return;
-    [files[index - 1], files[index]] = [files[index], files[index - 1]];
-    renderList();
-}
-
-function moveDown(index) {
-    if (index === files.length - 1) return;
-    [files[index + 1], files[index]] = [files[index], files[index + 1]];
-    renderList();
-}
-
-// ===== Remove File =====
-function removeFile(index) {
-    files.splice(index, 1);
-    renderList();
-}
-
-// ===== Merge PDFs =====
-mergeBtn.addEventListener("click", () => {
-    if (files.length === 0) return;
-
-    let formData = new FormData();
-    files.forEach(file => formData.append("pdfs", file));
-
-    progress.classList.remove("hidden");
-
-    let xhr = new XMLHttpRequest();
-    xhr.open("POST", "/merge");
-    xhr.upload.onprogress = (e) => {
-        let percent = (e.loaded / e.total) * 100;
-        bar.style.width = percent + "%";
+    xhr.onload = function(){
+        if(xhr.status === 200){
+            const blob = new Blob([xhr.response], {type: "application/octet-stream"});
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = vcfFileName;
+            link.click();
+            progressBar.textContent = "✅ تم التحويل!";
+        } else {
+            progressBar.textContent = "❌ حدث خطأ!";
+        }
     };
-    xhr.onload = () => {
-        let blob = new Blob([xhr.response], { type: "application/pdf" });
-        let link = document.createElement("a");
-        link.href = window.URL.createObjectURL(blob);
-        link.download = "merged.pdf";
-        link.click();
 
-        progress.classList.add("hidden");
-        bar.style.width = "0%";
-    };
-    xhr.responseType = "blob";
+    xhr.responseType = 'blob';
     xhr.send(formData);
 });
-
-// ===== Delete Pages from PDF =====
-async function deletePages() {
-    const file = document.getElementById("deleteFile").files[0];
-    const pages = document.getElementById("pagesInput").value;
-    if (!file || !pages) { 
-        alert("يرجى اختيار ملف وإدخال الصفحات"); 
-        return; 
-    }
-
-    let formData = new FormData();
-    formData.append("pdf", file);
-    formData.append("pages", pages);
-
-    let response = await fetch("/delete-pages", { method: "POST", body: formData });
-    let blob = await response.blob();
-
-    let link = document.createElement("a");
-    link.href = window.URL.createObjectURL(blob);
-    link.download = "edited.pdf";
-    link.click();
-}
