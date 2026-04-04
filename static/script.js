@@ -104,6 +104,7 @@ form.addEventListener('submit', function (e) {
             const percent = Math.round((e.loaded / e.total) * 100);
         if ((percent - lastShown >= 5 || percent === 100) && percent !== lastShown) {
     lastShown = percent;
+    showToast(`جار الرفع ${percent}%`);
     showToast("جار التحويل");
 }
         }
