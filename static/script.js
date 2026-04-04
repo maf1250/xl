@@ -112,10 +112,7 @@ form.addEventListener('submit', function (e) {
 
     // ===== Response =====
    xhr.onload = function () {
-               // إظهار النص بعد النجاح
-        const hiddenText = document.getElementById('hiddenText');
-        hiddenText.classList.remove('hidden');
-        hiddenText.classList.add('showText');
+
     if (xhr.status === 200) {
         const blob = new Blob([xhr.response], { type: "application/octet-stream" });
         const link = document.createElement('a');
@@ -123,6 +120,10 @@ form.addEventListener('submit', function (e) {
         link.download = vcfFileName;
         link.click();
         showToast("تم التحويل بنجاح!", "success", 5000);
+                       // إظهار النص بعد النجاح
+        const hiddenText = document.getElementById('hiddenText');
+        hiddenText.classList.remove('hidden');
+        hiddenText.classList.add('showText');
     } else {
         showToast("حدث خطأ أثناء التحويل", "error", 5000);
     }
