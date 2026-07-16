@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>تحويل ملف الاكسل إلى جهات اتصال</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- مكتبة قراءة ملفات الاكسل في المتصفح -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        html, body { margin: 0; padding: 0; font-family: 'Cairo', sans-serif; background: #f2f2f7; }
+        .container { max-width: 480px; margin: auto; padding: 20px; }
+        h2 { text-align: center; font-size: 18px; }
+        .section { background: #fff; padding: 15px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        .section label { display: block; margin-bottom: 8px; color: #666; }
+        input, select, button { width: 100%; box-sizing: border-box; padding: 14px; font-size: 16px; border-radius: 12px; border: 1px solid #ddd; background: #f9f9fb; margin-bottom: 3px; }
+        .section > *:not(:last-child) { margin-bottom: 7px; }
+        button { background: linear-gradient(135deg, #4CAF50, #43a047); color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
+        .drop-zone { border: 2px dashed #ccc; border-radius: 16px; padding: 25px; text-align: center; background: #fafafa; cursor: pointer;}
+        .drop-zone.dragover { border-color: #4CAF50; background: #e8f5e9; }
+        #manual-fields.hidden, #gender_select.hidden { display: none; }
+        #manual-fields.show, #gender_select.show { display: block; }
+        .hidden { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.5s ease; pointer-events: none; padding: 0; margin: 0; border: none; display: none; }
+        .show { max-height: 200px; opacity: 1; transition: all 0.5s ease; }
+        .showText { display: block; opacity: 1; transition: all 0.5s ease; color: Gray; font-size: 14px; text-align: justify; line-height: 1.6; margin-top: 15px;}
+        #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 80px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s, bottom 0.3s; z-index: 9999; }
+        #toast.show { opacity: 1; bottom: 40px; }
+        #toast.success { background: #28a745; }
+        #toast.error { background: #dc3545; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
+    <form id="upload-form">
+        <div class="section">
+            <label>رفع الملف</label>
+            <div class="drop-zone" id="drop-zone">
+                <span id="drop-zone-text">اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره</span>
+            </div>
+            <input type="file" name="file" id="file-input" accept=".xls,.xlsx" style="display:none;" required>
+        </div>
+        <div class="section">
+            <label>هل ترغب بتحديد عناوين الأعمدة؟</label>
+            <select name="manual" id="manual_select">
+                <option value="no" selected>لا</option>
+                <option value="yes">نعم</option>
+            </select>
+            <div id="manual-fields" class="hidden">
+                <input type="text" name="name_col" id="name_col" placeholder="اكتب عنوان عمود الاسم">
+                <input type="text" name="mobile_col" id="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
+                <input type="text" name="city_col" id="city_col" placeholder="اكتب عنوان عمود المدينة (اختياري)">
+            </div>
+        </div>
+        <div class="section">
+            <label>هل ترغب بالتصفية حسب الجنس؟</label>
+            <select name="gender_filter" id="gender_filter">
+                <option value="no" selected>لا</option>
+                <option value="yes">نعم</option>
+            </select>
+            <select name="gender" id="gender_select" class="hidden">
+                <option value="male">ذكر</option>
+                <option value="female">أنثى</option>
+            </select>
+        </div>
+        <button type="submit">تحويل وتحميل الملف</button>
+        <p id="hiddenText" class="hidden">
+            يمكن لمستخدمي أجهزة الآيفون تنزيل جميع جهات الاتصال دفعة واحدة من خلال خيار مشاركة الملف عبر تطبيق البريد الإلكتروني الرسمي. كما يمكن مشاركة الملف مع مستخدمين آخرين عبر تطبيق الواتساب، مما يتيح لهم عرض كافة جهات الاتصال بسهولة.
+        </p>
+    </form>
+</div>
+<div id="toast"></div>
+
+<script>
+    // ===== Elements =====
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const dropZoneText = document.getElementById('drop-zone-text');
+    const form = document.getElementById('upload-form');
+
+    // ===== Toast Function =====
+    function showToast(message, type = "", duration = 5000) {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.className = "show " + type;
+        setTimeout(() => { toast.className = toast.className.replace("show", ""); }, duration);
+    }
+
+    // ===== Drag & Drop =====
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        fileInput.files = e.dataTransfer.files;
+        if (fileInput.files.length > 0) dropZoneText.textContent = fileInput.files[0].name;
+    });
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) dropZoneText.textContent = fileInput.files[0].name;
+        else dropZoneText.textContent = "اسحب وافلت ملف الاكسل هنا\nأو اضغط لاختياره";
+    });
+
+    // ===== UI Toggles =====
+    const genderFilter = document.getElementById('gender_filter');
+    const genderSelect = document.getElementById('gender_select');
+    genderFilter.addEventListener('change', () => {
+        if (genderFilter.value === 'yes') {
+            genderSelect.classList.remove('hidden'); genderSelect.classList.add('show');
+        } else {
+            genderSelect.classList.remove('show'); genderSelect.classList.add('hidden');
+        }
+    });
+
+    const manualSelect = document.getElementById('manual_select');
+    const manualFields = document.getElementById('manual-fields');
+    manualSelect.addEventListener('change', () => {
+        if (manualSelect.value === 'yes') {
+            manualFields.classList.remove('hidden'); manualFields.classList.add('show');
+        } else {
+            manualFields.classList.remove('show'); manualFields.classList.add('hidden');
+        }
+    });
+
+    // ===== Logic Function =====
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        if (fileInput.files.length === 0) {
+            showToast("الرجاء اختيار ملف أولاً", "error", 5000);
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const vcfFileName = file.name.replace(/\.[^/.]+$/, "") + ".vcf";
+
+        showToast("جارِ المعالجة...", "", 2000);
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
+
+                // Get settings
+                const useManual = manualSelect.value === "yes";
+                const useGender = genderFilter.value === "yes";
+                const genderChoice = genderSelect.value;
+                
+                const colName = useManual ? document.getElementById('name_col').value.trim() : "اسم الحاج";
+                const colMobile = useManual ? document.getElementById('mobile_col').value.trim() : "رقم الجوال";
+                const colCity = useManual ? document.getElementById('city_col').value.trim() : "المدينة";
+                const colGender = "الجنس";
+
+                let validContacts = [];
+                let seenMobiles = new Set();
+
+                jsonData.forEach(row => {
+                    // Clean object keys (remove leading/trailing spaces)
+                    let cleanRow = {};
+                    for(let key in row) {
+                        cleanRow[key.trim()] = row[key];
+                    }
+
+                    // Gender filter
+                    if (useGender) {
+                        let targetGender = (genderChoice === 'male') ? "ذكر" : "أنثى";
+                        if (cleanRow[colGender] !== targetGender) return;
+                    }
+
+                    let name = String(cleanRow[colName] || "").trim();
+                    let mobile = String(cleanRow[colMobile] || "").trim();
+                    let city = String(cleanRow[colCity] || "").trim();
+
+                    if(!mobile || !name) return; // Skip if no mobile or name
+
+                    // Format mobile
+                    mobile = mobile.replace(/[\s-]/g, "");
+                    if (mobile.startsWith("+966")) {
+                        // Keep as is
+                    } else if (mobile.startsWith("966")) {
+                        mobile = "+" + mobile;
+                    } else if (mobile.startsWith("05")) {
+                        mobile = "+966" + mobile.substring(1);
+                    } else {
+                        mobile = "+966" + mobile;
+                    }
+
+                    // Remove duplicates
+                    if (seenMobiles.has(mobile)) return;
+                    seenMobiles.add(mobile);
+
+                    // Split Name
+                    let parts = name.split(/\s+/);
+                    let firstName = parts[0] || "";
+                    let lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+                    let fullName = (firstName + " " + lastName).trim();
+
+                    validContacts.push({
+                        first: firstName,
+                        last: lastName,
+                        full: fullName,
+                        mobile: mobile,
+                        city: city
+                    });
+                });
+
+                // Sort by full name
+                validContacts.sort((a, b) => a.full.localeCompare(b.full, 'ar'));
+
+                // Generate VCF string
+                let vcfData = "";
+                validContacts.forEach(contact => {
+                    vcfData += "BEGIN:VCARD\n";
+                    vcfData += "VERSION:3.0\n";
+                    vcfData += `N:${contact.last};${contact.first};;;\n`;
+                    vcfData += `FN:${contact.full}\n`;
+                    if(contact.city) vcfData += `ORG:${contact.city}\n`;
+                    vcfData += `TEL;TYPE=CELL:${contact.mobile}\n`;
+                    vcfData += "END:VCARD\n";
+                });
+
+                if (validContacts.length === 0) {
+                    showToast("لم يتم العثور على بيانات مطابقة. تأكد من أسماء الأعمدة.", "error", 5000);
+                    return;
+                }
+
+                // Download File
+                const blob = new Blob([vcfData], { type: 'text/vcard;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", vcfFileName);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                showToast("تم التحويل بنجاح!", "success", 5000);
+                document.getElementById('hiddenText').classList.remove('hidden');
+                document.getElementById('hiddenText').classList.add('showText');
+
+            } catch (error) {
+                console.error(error);
+                showToast("حدث خطأ أثناء قراءة الملف، تأكد من صحة الملف.", "error", 5000);
+            }
+        };
+
+        reader.onerror = function() {
+            showToast("حدث خطأ أثناء قراءة الملف.", "error", 5000);
+        }
+
+        reader.readAsArrayBuffer(file);
+    });
+</script>
+</body>
+</html>
