@@ -21,11 +21,11 @@
         button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
         .drop-zone { border: 2px dashed #ccc; border-radius: 16px; padding: 25px; text-align: center; background: #fafafa; cursor: pointer;}
         .drop-zone.dragover { border-color: #4CAF50; background: #e8f5e9; }
-        #manual-fields.hidden, #gender_select.hidden { display: none; }
-        #manual-fields.show, #gender_select.show { display: block; }
+        
         .hidden { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.5s ease; pointer-events: none; padding: 0; margin: 0; border: none; display: none; }
-        .show { max-height: 350px; opacity: 1; transition: all 0.5s ease; }
+        .show { max-height: 400px; opacity: 1; transition: all 0.5s ease; display: block; }
         .showText { display: block; opacity: 1; transition: all 0.5s ease; color: Gray; font-size: 14px; text-align: justify; line-height: 1.6; margin-top: 15px;}
+        
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 80px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s, bottom 0.3s; z-index: 9999; }
         #toast.show { opacity: 1; bottom: 40px; }
         #toast.success { background: #28a745; }
@@ -36,6 +36,7 @@
 <div class="container">
     <h2>📱 تحويل ملف الاكسل إلى جهات اتصال</h2>
     <form id="upload-form">
+        <!-- رفع الملف -->
         <div class="section">
             <label>رفع الملف</label>
             <div class="drop-zone" id="drop-zone">
@@ -43,6 +44,8 @@
             </div>
             <input type="file" name="file" id="file-input" accept=".xls,.xlsx" style="display:none;" required>
         </div>
+
+        <!-- تحديد الأعمدة -->
         <div class="section">
             <label>هل ترغب بتحديد عناوين الأعمدة يدويًا؟</label>
             <select name="manual" id="manual_select">
@@ -66,17 +69,28 @@
                 </select>
             </div>
         </div>
+
+        <!-- تصفية الجنس -->
         <div class="section">
             <label>هل ترغب بالتصفية حسب الجنس؟</label>
             <select name="gender_filter" id="gender_filter">
                 <option value="no" selected>لا</option>
                 <option value="yes">نعم</option>
             </select>
-            <select name="gender" id="gender_select" class="hidden">
-                <option value="male">ذكر</option>
-                <option value="female">أنثى</option>
-            </select>
+            <div id="gender-fields" class="hidden">
+                <span class="field-label">عمود الجنس:</span>
+                <select name="gender_col" id="gender_col">
+                    <option value="">الرجاء رفع الملف أولاً...</option>
+                </select>
+
+                <span class="field-label">الاحتفاظ بـ:</span>
+                <select name="gender_choice" id="gender_choice">
+                    <option value="male">الذكور فقط</option>
+                    <option value="female">الإناث فقط</option>
+                </select>
+            </div>
         </div>
+
         <button type="submit">تحويل وتحميل الملف</button>
         <p id="hiddenText" class="hidden">
             يمكن لمستخدمي أجهزة الآيفون تنزيل جميع جهات الاتصال دفعة واحدة من خلال خيار مشاركة الملف عبر تطبيق البريد الإلكتروني الرسمي. كما يمكن مشاركة الملف مع مستخدمين آخرين عبر تطبيق الواتساب، مما يتيح لهم عرض كافة جهات الاتصال بسهولة.
@@ -96,6 +110,7 @@
     const nameSelect = document.getElementById('name_col');
     const mobileSelect = document.getElementById('mobile_col');
     const citySelect = document.getElementById('city_col');
+    const genderColSelect = document.getElementById('gender_col');
 
     let fileHeaders = []; // لحفظ عناوين الأعمدة
 
@@ -120,7 +135,6 @@
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
                 
-                // استخراج الصف الأول (العناوين)
                 const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
                 if(json.length > 0) {
                     fileHeaders = json[0].filter(h => h !== undefined && String(h).trim() !== "");
@@ -134,7 +148,7 @@
         reader.readAsArrayBuffer(file);
     }
 
-    // ===== Update Dropdowns =====
+    // ===== Update Dropdowns & Smart Detection =====
     function updateDropdowns() {
         const optionsHTML = '<option value="">-- اختر العمود --</option>' + 
                             fileHeaders.map(h => `<option value="${String(h).trim()}">${String(h).trim()}</option>`).join('');
@@ -142,15 +156,32 @@
         nameSelect.innerHTML = optionsHTML;
         mobileSelect.innerHTML = optionsHTML;
         citySelect.innerHTML = optionsHTML;
+        genderColSelect.innerHTML = optionsHTML; // إضافة عمود الجنس للقوائم
 
-        // محاولة اختيار الأعمدة الافتراضية تلقائياً إن وُجدت
-        if(fileHeaders.includes("اسم الحاج")) nameSelect.value = "اسم الحاج";
-        else if(fileHeaders.includes("الاسم")) nameSelect.value = "الاسم";
+        // التعرف الذكي على عمود الاسم
+        const possibleNameCols = ["اسم الحاج", "الاسم", "اسم المشترك", "name", "full name"];
+        nameSelect.value = findMatchingColumn(possibleNameCols);
 
-        if(fileHeaders.includes("رقم الجوال")) mobileSelect.value = "رقم الجوال";
-        else if(fileHeaders.includes("الجوال")) mobileSelect.value = "الجوال";
+        // التعرف الذكي على عمود الجوال
+        const possibleMobileCols = ["رقم الجوال", "الجوال", "رقم الهاتف", "الهاتف", "mobile", "phone"];
+        mobileSelect.value = findMatchingColumn(possibleMobileCols);
 
-        if(fileHeaders.includes("المدينة")) citySelect.value = "المدينة";
+        // التعرف الذكي على عمود المدينة
+        const possibleCityCols = ["المدينة", "المنطقة", "city", "region"];
+        citySelect.value = findMatchingColumn(possibleCityCols);
+
+        // التعرف الذكي على عمود الجنس
+        const possibleGenderCols = ["الجنس", "النوع", "gender", "sex"];
+        genderColSelect.value = findMatchingColumn(possibleGenderCols);
+    }
+
+    // دالة مساعدة للبحث في مصفوفة الأعمدة (تتجاهل حالة الأحرف والمسافات الزائدة)
+    function findMatchingColumn(keywords) {
+        for (let keyword of keywords) {
+            let found = fileHeaders.find(h => String(h).trim().toLowerCase() === keyword.toLowerCase());
+            if (found) return found;
+        }
+        return "";
     }
 
     // ===== Drag & Drop & File Selection =====
@@ -171,20 +202,18 @@
             processFileForHeaders(fileInput.files[0]);
         } else {
             dropZoneText.innerHTML = "اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره";
-            nameSelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
-            mobileSelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
-            citySelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
         }
     });
 
     // ===== UI Toggles =====
     const genderFilter = document.getElementById('gender_filter');
-    const genderSelect = document.getElementById('gender_select');
+    const genderFields = document.getElementById('gender-fields');
     genderFilter.addEventListener('change', () => {
         if (genderFilter.value === 'yes') {
-            genderSelect.classList.remove('hidden'); genderSelect.classList.add('show');
+            genderFields.classList.remove('hidden'); genderFields.classList.add('show');
+            if(fileInput.files.length === 0) showToast("يفضل رفع الملف أولاً لتحديد عمود الجنس", "", 3000);
         } else {
-            genderSelect.classList.remove('show'); genderSelect.classList.add('hidden');
+            genderFields.classList.remove('show'); genderFields.classList.add('hidden');
         }
     });
 
@@ -193,9 +222,7 @@
     manualSelect.addEventListener('change', () => {
         if (manualSelect.value === 'yes') {
             manualFields.classList.remove('hidden'); manualFields.classList.add('show');
-            if(fileInput.files.length === 0) {
-                showToast("يفضل رفع الملف أولاً لجلب أسماء الأعمدة", "", 3000);
-            }
+            if(fileInput.files.length === 0) showToast("يفضل رفع الملف أولاً لجلب أسماء الأعمدة", "", 3000);
         } else {
             manualFields.classList.remove('show'); manualFields.classList.add('hidden');
         }
@@ -214,12 +241,21 @@
         const vcfFileName = file.name.replace(/\.[^/.]+$/, "") + ".vcf";
 
         const useManual = manualSelect.value === "yes";
-        const colName = useManual ? nameSelect.value : "اسم الحاج";
-        const colMobile = useManual ? mobileSelect.value : "رقم الجوال";
-        const colCity = useManual ? citySelect.value : "المدينة";
+        const colName = useManual ? nameSelect.value : (findMatchingColumn(["اسم الحاج", "الاسم"]) || "اسم الحاج");
+        const colMobile = useManual ? mobileSelect.value : (findMatchingColumn(["رقم الجوال", "الجوال"]) || "رقم الجوال");
+        const colCity = useManual ? citySelect.value : findMatchingColumn(["المدينة"]);
+
+        const useGender = genderFilter.value === "yes";
+        const colGender = genderColSelect.value;
+        const genderChoice = document.getElementById('gender_choice').value;
 
         if (useManual && (!colName || !colMobile)) {
             showToast("الرجاء اختيار عمود الاسم وعمود الجوال", "error", 4000);
+            return;
+        }
+
+        if (useGender && !colGender) {
+            showToast("الرجاء تحديد عمود الجنس من القائمة", "error", 4000);
             return;
         }
 
@@ -233,28 +269,34 @@
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
-                const useGender = genderFilter.value === "yes";
-                const genderChoice = genderSelect.value;
-                const colGender = "الجنس";
-
                 let validContacts = [];
                 let seenMobiles = new Set();
+
+                // قواميس ذكية للتعرف على الجنس داخل الخلايا
+                const maleWords = ["ذكر", "رجل", "m", "male", "ولد"];
+                const femaleWords = ["أنثى", "انثى", "امرأة", "امراة", "f", "female", "بنت"];
 
                 jsonData.forEach(row => {
                     let cleanRow = {};
                     for(let key in row) cleanRow[key.trim()] = row[key];
 
+                    // تصفية الجنس (ذكية)
                     if (useGender) {
-                        let targetGender = (genderChoice === 'male') ? "ذكر" : "أنثى";
-                        if (cleanRow[colGender] !== targetGender) return;
+                        let cellValue = String(cleanRow[colGender] || "").trim().toLowerCase();
+                        let isMale = maleWords.includes(cellValue);
+                        let isFemale = femaleWords.includes(cellValue);
+
+                        if (genderChoice === 'male' && !isMale) return; // تخطي إذا لم يكن ذكراً
+                        if (genderChoice === 'female' && !isFemale) return; // تخطي إذا لم تكن أنثى
                     }
 
                     let name = String(cleanRow[colName] || "").trim();
                     let mobile = String(cleanRow[colMobile] || "").trim();
-                    let city = String(cleanRow[colCity] || "").trim();
+                    let city = colCity ? String(cleanRow[colCity] || "").trim() : "";
 
                     if(!mobile || !name) return;
 
+                    // تنسيق الجوال
                     mobile = mobile.replace(/[\s-]/g, "");
                     if (!mobile.startsWith("+966")) {
                         if (mobile.startsWith("966")) mobile = "+" + mobile;
@@ -288,7 +330,7 @@
                 });
 
                 if (validContacts.length === 0) {
-                    showToast("لم يتم العثور على بيانات. تأكد من مطابقة الأعمدة.", "error", 5000);
+                    showToast("لم يتم العثور على بيانات تطابق شروطك. يرجى التأكد من اختيار الأعمدة الصحيحة.", "error", 6000);
                     return;
                 }
 
@@ -300,7 +342,7 @@
                 link.click();
                 document.body.removeChild(link);
 
-                showToast("تم التحويل بنجاح!", "success", 5000);
+                showToast(`تم التحويل بنجاح! (${validContacts.length} جهة اتصال)`, "success", 5000);
                 document.getElementById('hiddenText').classList.remove('hidden');
                 document.getElementById('hiddenText').classList.add('showText');
 
