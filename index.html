@@ -14,17 +14,17 @@
         .container { max-width: 480px; margin: auto; padding: 20px; }
         h2 { text-align: center; font-size: 18px; }
         .section { background: #fff; padding: 15px; border-radius: 16px; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .section label { display: block; margin-bottom: 8px; color: #666; }
-        input, select, button { width: 100%; box-sizing: border-box; padding: 14px; font-size: 16px; border-radius: 12px; border: 1px solid #ddd; background: #f9f9fb; margin-bottom: 3px; }
-        .section > *:not(:last-child) { margin-bottom: 7px; }
-        button { background: linear-gradient(135deg, #4CAF50, #43a047); color: white; border: none; font-weight: bold; cursor: pointer; }
+        .section label { display: block; margin-bottom: 8px; color: #666; font-weight: 600; }
+        .field-label { font-size: 14px; color: #888; margin-bottom: 4px; display: block; }
+        input, select, button { width: 100%; box-sizing: border-box; padding: 14px; font-size: 16px; border-radius: 12px; border: 1px solid #ddd; background: #f9f9fb; margin-bottom: 8px; font-family: 'Cairo', sans-serif;}
+        button { background: linear-gradient(135deg, #4CAF50, #43a047); color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 10px; }
         button:hover { background: linear-gradient(135deg, #45a049, #388e3c); }
         .drop-zone { border: 2px dashed #ccc; border-radius: 16px; padding: 25px; text-align: center; background: #fafafa; cursor: pointer;}
         .drop-zone.dragover { border-color: #4CAF50; background: #e8f5e9; }
         #manual-fields.hidden, #gender_select.hidden { display: none; }
         #manual-fields.show, #gender_select.show { display: block; }
         .hidden { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.5s ease; pointer-events: none; padding: 0; margin: 0; border: none; display: none; }
-        .show { max-height: 200px; opacity: 1; transition: all 0.5s ease; }
+        .show { max-height: 350px; opacity: 1; transition: all 0.5s ease; }
         .showText { display: block; opacity: 1; transition: all 0.5s ease; color: Gray; font-size: 14px; text-align: justify; line-height: 1.6; margin-top: 15px;}
         #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 12px 20px; border-radius: 80px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s, bottom 0.3s; z-index: 9999; }
         #toast.show { opacity: 1; bottom: 40px; }
@@ -44,15 +44,26 @@
             <input type="file" name="file" id="file-input" accept=".xls,.xlsx" style="display:none;" required>
         </div>
         <div class="section">
-            <label>هل ترغب بتحديد عناوين الأعمدة؟</label>
+            <label>هل ترغب بتحديد عناوين الأعمدة يدويًا؟</label>
             <select name="manual" id="manual_select">
-                <option value="no" selected>لا</option>
-                <option value="yes">نعم</option>
+                <option value="no" selected>لا (استخدام الافتراضي)</option>
+                <option value="yes">نعم (اختيار من الملف)</option>
             </select>
             <div id="manual-fields" class="hidden">
-                <input type="text" name="name_col" id="name_col" placeholder="اكتب عنوان عمود الاسم">
-                <input type="text" name="mobile_col" id="mobile_col" placeholder="اكتب عنوان عمود رقم الجوال">
-                <input type="text" name="city_col" id="city_col" placeholder="اكتب عنوان عمود المدينة (اختياري)">
+                <span class="field-label">عمود الاسم:</span>
+                <select name="name_col" id="name_col">
+                    <option value="">الرجاء رفع الملف أولاً...</option>
+                </select>
+
+                <span class="field-label">عمود رقم الجوال:</span>
+                <select name="mobile_col" id="mobile_col">
+                    <option value="">الرجاء رفع الملف أولاً...</option>
+                </select>
+
+                <span class="field-label">عمود المدينة (اختياري):</span>
+                <select name="city_col" id="city_col">
+                    <option value="">الرجاء رفع الملف أولاً...</option>
+                </select>
             </div>
         </div>
         <div class="section">
@@ -80,6 +91,13 @@
     const fileInput = document.getElementById('file-input');
     const dropZoneText = document.getElementById('drop-zone-text');
     const form = document.getElementById('upload-form');
+    
+    // Selects
+    const nameSelect = document.getElementById('name_col');
+    const mobileSelect = document.getElementById('mobile_col');
+    const citySelect = document.getElementById('city_col');
+
+    let fileHeaders = []; // لحفظ عناوين الأعمدة
 
     // ===== Toast Function =====
     function showToast(message, type = "", duration = 5000) {
@@ -89,20 +107,74 @@
         setTimeout(() => { toast.className = toast.className.replace("show", ""); }, duration);
     }
 
-    // ===== Drag & Drop =====
+    // ===== Extract Headers from Excel =====
+    function processFileForHeaders(file) {
+        if (!file) return;
+        dropZoneText.textContent = file.name;
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // استخراج الصف الأول (العناوين)
+                const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                if(json.length > 0) {
+                    fileHeaders = json[0].filter(h => h !== undefined && String(h).trim() !== "");
+                    updateDropdowns();
+                }
+            } catch (err) {
+                console.error(err);
+                showToast("حدث خطأ أثناء قراءة الأعمدة", "error", 3000);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    // ===== Update Dropdowns =====
+    function updateDropdowns() {
+        const optionsHTML = '<option value="">-- اختر العمود --</option>' + 
+                            fileHeaders.map(h => `<option value="${String(h).trim()}">${String(h).trim()}</option>`).join('');
+        
+        nameSelect.innerHTML = optionsHTML;
+        mobileSelect.innerHTML = optionsHTML;
+        citySelect.innerHTML = optionsHTML;
+
+        // محاولة اختيار الأعمدة الافتراضية تلقائياً إن وُجدت
+        if(fileHeaders.includes("اسم الحاج")) nameSelect.value = "اسم الحاج";
+        else if(fileHeaders.includes("الاسم")) nameSelect.value = "الاسم";
+
+        if(fileHeaders.includes("رقم الجوال")) mobileSelect.value = "رقم الجوال";
+        else if(fileHeaders.includes("الجوال")) mobileSelect.value = "الجوال";
+
+        if(fileHeaders.includes("المدينة")) citySelect.value = "المدينة";
+    }
+
+    // ===== Drag & Drop & File Selection =====
     dropZone.addEventListener('click', () => fileInput.click());
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
     dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
     dropZone.addEventListener('drop', e => {
         e.preventDefault();
         dropZone.classList.remove('dragover');
-        fileInput.files = e.dataTransfer.files;
-        if (fileInput.files.length > 0) dropZoneText.textContent = fileInput.files[0].name;
+        if (e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            processFileForHeaders(fileInput.files[0]);
+        }
     });
 
     fileInput.addEventListener('change', () => {
-        if (fileInput.files.length > 0) dropZoneText.textContent = fileInput.files[0].name;
-        else dropZoneText.textContent = "اسحب وافلت ملف الاكسل هنا\nأو اضغط لاختياره";
+        if (fileInput.files.length > 0) {
+            processFileForHeaders(fileInput.files[0]);
+        } else {
+            dropZoneText.innerHTML = "اسحب وافلت ملف الاكسل هنا<br>أو اضغط لاختياره";
+            nameSelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
+            mobileSelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
+            citySelect.innerHTML = '<option value="">الرجاء رفع الملف أولاً...</option>';
+        }
     });
 
     // ===== UI Toggles =====
@@ -121,12 +193,15 @@
     manualSelect.addEventListener('change', () => {
         if (manualSelect.value === 'yes') {
             manualFields.classList.remove('hidden'); manualFields.classList.add('show');
+            if(fileInput.files.length === 0) {
+                showToast("يفضل رفع الملف أولاً لجلب أسماء الأعمدة", "", 3000);
+            }
         } else {
             manualFields.classList.remove('show'); manualFields.classList.add('hidden');
         }
     });
 
-    // ===== Logic Function =====
+    // ===== Logic Function (Submit) =====
     form.addEventListener('submit', function (e) {
         e.preventDefault();
 
@@ -138,6 +213,16 @@
         const file = fileInput.files[0];
         const vcfFileName = file.name.replace(/\.[^/.]+$/, "") + ".vcf";
 
+        const useManual = manualSelect.value === "yes";
+        const colName = useManual ? nameSelect.value : "اسم الحاج";
+        const colMobile = useManual ? mobileSelect.value : "رقم الجوال";
+        const colCity = useManual ? citySelect.value : "المدينة";
+
+        if (useManual && (!colName || !colMobile)) {
+            showToast("الرجاء اختيار عمود الاسم وعمود الجوال", "error", 4000);
+            return;
+        }
+
         showToast("جارِ المعالجة...", "", 2000);
 
         const reader = new FileReader();
@@ -145,31 +230,20 @@
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, {defval: ""});
 
-                // Get settings
-                const useManual = manualSelect.value === "yes";
                 const useGender = genderFilter.value === "yes";
                 const genderChoice = genderSelect.value;
-                
-                const colName = useManual ? document.getElementById('name_col').value.trim() : "اسم الحاج";
-                const colMobile = useManual ? document.getElementById('mobile_col').value.trim() : "رقم الجوال";
-                const colCity = useManual ? document.getElementById('city_col').value.trim() : "المدينة";
                 const colGender = "الجنس";
 
                 let validContacts = [];
                 let seenMobiles = new Set();
 
                 jsonData.forEach(row => {
-                    // Clean object keys (remove leading/trailing spaces)
                     let cleanRow = {};
-                    for(let key in row) {
-                        cleanRow[key.trim()] = row[key];
-                    }
+                    for(let key in row) cleanRow[key.trim()] = row[key];
 
-                    // Gender filter
                     if (useGender) {
                         let targetGender = (genderChoice === 'male') ? "ذكر" : "أنثى";
                         if (cleanRow[colGender] !== targetGender) return;
@@ -179,65 +253,49 @@
                     let mobile = String(cleanRow[colMobile] || "").trim();
                     let city = String(cleanRow[colCity] || "").trim();
 
-                    if(!mobile || !name) return; // Skip if no mobile or name
+                    if(!mobile || !name) return;
 
-                    // Format mobile
                     mobile = mobile.replace(/[\s-]/g, "");
-                    if (mobile.startsWith("+966")) {
-                        // Keep as is
-                    } else if (mobile.startsWith("966")) {
-                        mobile = "+" + mobile;
-                    } else if (mobile.startsWith("05")) {
-                        mobile = "+966" + mobile.substring(1);
-                    } else {
-                        mobile = "+966" + mobile;
+                    if (!mobile.startsWith("+966")) {
+                        if (mobile.startsWith("966")) mobile = "+" + mobile;
+                        else if (mobile.startsWith("05")) mobile = "+966" + mobile.substring(1);
+                        else mobile = "+966" + mobile;
                     }
 
-                    // Remove duplicates
                     if (seenMobiles.has(mobile)) return;
                     seenMobiles.add(mobile);
 
-                    // Split Name
                     let parts = name.split(/\s+/);
                     let firstName = parts[0] || "";
                     let lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
-                    let fullName = (firstName + " " + lastName).trim();
-
+                    
                     validContacts.push({
-                        first: firstName,
-                        last: lastName,
-                        full: fullName,
-                        mobile: mobile,
-                        city: city
+                        first: firstName, last: lastName,
+                        full: (firstName + " " + lastName).trim(),
+                        mobile: mobile, city: city
                     });
                 });
 
-                // Sort by full name
                 validContacts.sort((a, b) => a.full.localeCompare(b.full, 'ar'));
 
-                // Generate VCF string
                 let vcfData = "";
                 validContacts.forEach(contact => {
-                    vcfData += "BEGIN:VCARD\n";
-                    vcfData += "VERSION:3.0\n";
+                    vcfData += "BEGIN:VCARD\nVERSION:3.0\n";
                     vcfData += `N:${contact.last};${contact.first};;;\n`;
                     vcfData += `FN:${contact.full}\n`;
                     if(contact.city) vcfData += `ORG:${contact.city}\n`;
-                    vcfData += `TEL;TYPE=CELL:${contact.mobile}\n`;
-                    vcfData += "END:VCARD\n";
+                    vcfData += `TEL;TYPE=CELL:${contact.mobile}\nEND:VCARD\n`;
                 });
 
                 if (validContacts.length === 0) {
-                    showToast("لم يتم العثور على بيانات مطابقة. تأكد من أسماء الأعمدة.", "error", 5000);
+                    showToast("لم يتم العثور على بيانات. تأكد من مطابقة الأعمدة.", "error", 5000);
                     return;
                 }
 
-                // Download File
                 const blob = new Blob([vcfData], { type: 'text/vcard;charset=utf-8;' });
                 const link = document.createElement("a");
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", vcfFileName);
+                link.href = URL.createObjectURL(blob);
+                link.download = vcfFileName;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
@@ -248,14 +306,9 @@
 
             } catch (error) {
                 console.error(error);
-                showToast("حدث خطأ أثناء قراءة الملف، تأكد من صحة الملف.", "error", 5000);
+                showToast("حدث خطأ أثناء المعالجة.", "error", 5000);
             }
         };
-
-        reader.onerror = function() {
-            showToast("حدث خطأ أثناء قراءة الملف.", "error", 5000);
-        }
-
         reader.readAsArrayBuffer(file);
     });
 </script>
