@@ -55,17 +55,17 @@
             <div id="manual-fields" class="hidden">
                 <span class="field-label">عمود الاسم:</span>
                 <select name="name_col" id="name_col">
-                    <option value="">الرجاء رفع الملف أولاً...</option>
+                    <option value="">نأمل رفع الملف أولاً...</option>
                 </select>
 
                 <span class="field-label">عمود رقم الجوال:</span>
                 <select name="mobile_col" id="mobile_col">
-                    <option value="">الرجاء رفع الملف أولاً...</option>
+                    <option value="">نأمل رفع الملف أولاً...</option>
                 </select>
 
                 <span class="field-label">عمود المدينة (اختياري):</span>
                 <select name="city_col" id="city_col">
-                    <option value="">الرجاء رفع الملف أولاً...</option>
+                    <option value="">نأمل رفع الملف أولاً...</option>
                 </select>
             </div>
         </div>
@@ -80,7 +80,7 @@
             <div id="gender-fields" class="hidden">
                 <span class="field-label">عمود الجنس:</span>
                 <select name="gender_col" id="gender_col">
-                    <option value="">الرجاء رفع الملف أولاً...</option>
+                    <option value="">نأمل رفع الملف أولاً...</option>
                 </select>
 
                 <span class="field-label">الاحتفاظ بـ:</span>
@@ -233,7 +233,7 @@
         e.preventDefault();
 
         if (fileInput.files.length === 0) {
-            showToast("الرجاء اختيار ملف أولاً", "error", 5000);
+            showToast("نأمل اختيار ملف أولاً", "error", 5000);
             return;
         }
 
@@ -250,12 +250,12 @@
         const genderChoice = document.getElementById('gender_choice').value;
 
         if (useManual && (!colName || !colMobile)) {
-            showToast("الرجاء اختيار عمود الاسم وعمود الجوال", "error", 4000);
+            showToast("نأمل اختيار عمود الاسم وعمود الجوال", "error", 4000);
             return;
         }
 
         if (useGender && !colGender) {
-            showToast("الرجاء تحديد عمود الجنس من القائمة", "error", 4000);
+            showToast("نأمل تحديد عمود الجنس من القائمة", "error", 4000);
             return;
         }
 
@@ -330,7 +330,7 @@
                 });
 
                 if (validContacts.length === 0) {
-                    showToast("لم يتم العثور على بيانات تطابق شروطك. يرجى التأكد من اختيار الأعمدة الصحيحة.", "error", 6000);
+                    showToast("لم يتم العثور على بيانات تطابق شروطك. نأمل التأكد من اختيار الأعمدة الصحيحة.", "error", 6000);
                     return;
                 }
 
