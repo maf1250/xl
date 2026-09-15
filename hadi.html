@@ -2726,7 +2726,7 @@ function setupHTML(deptId){
                 }
               });
             });
-            return otherRooms.map(r => `<option value="${esc(r.name)}">${r.building ? `(مبنى: ${esc(r.building)})` : ''}</option>`).join('');
+            return otherRooms.map(r => `<option value="${esc(r.name)}"></option>`).join('');
           })()}
         </datalist>
         <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addRoom('${deptId}')">➕ إضافة</button>
