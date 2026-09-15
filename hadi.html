@@ -537,9 +537,54 @@ function isSupCourseByName(name) {
   return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
 }
 
+// دالة التعرف على مقررات الحاسب المشتركة بالاسم
+function isCompCourseByName(name) {
+  if (!name) return false;
+  const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
+  return /تطبيقات الحاسب|مقدمة تطبيقات الحاسب|تطبيقات الحاسب المتقدمة|حاسب آلي|حاسب الي/.test(n);
+}
+
 let CU=null, currentDept=null, deptActiveTab='grid', settingsTab='depts';
-  // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
+// فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
 function canUserManageCourse(cName, cCat, targetDeptId) {
+    if (!CU) return false;
+    if (CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean') return true;
+    if (CU.role !== 'head') return false;
+
+    let cat = cCat;
+    // إذا كانت الفئة تشير لنوع المحاضرة (عملي/نظري) أو غير محددة، نحددها بدقة من اسم المقرر
+    if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || cat === 'remote' || cat === 'selfstudy' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
+        const sets = buildSupItNameSets();
+        if (sets.supNames.has(cName) || isSupCourseByName(cName)) cat = 'sup';
+        else if (sets.itNames.has(cName) || isCompCourseByName(cName)) cat = 'comp';
+        else cat = 'dept';
+    }
+
+    const hasIT = getDepts().some(d => d.id === 'it');
+
+    // 1. رئيس قسم الدراسات العامة: له صلاحية على مواد الدراسات فقط (والحاسب إذا سُمح له)
+    if (CU.dept === 'sup') {
+        if (cat === 'sup') return true;
+        if (cat === 'comp' && (!hasIT || getAllowSupEditComp())) return true;
+        return false;
+    }
+
+    // 2. رئيس قسم الحاسب: له صلاحية على مقررات الحاسب المشتركة أينما وُجدت
+    if (CU.dept === 'it') {
+        if (cat === 'comp' || isCompCourseByName(cName)) return true;
+        if (targetDeptId === 'it' && cat === 'dept') return true;
+        if (cat === 'sup' && getAllowSupEdit()) return true;
+        return false;
+    }
+
+    // 3. رؤساء الأقسام التخصصية (الميكانيكية، الأعمال...)
+    if (cat === 'sup') return getAllowSupEdit();
+    if (cat === 'comp') return false;
+    if (targetDeptId && targetDeptId !== 'sup') {
+        return CU.dept === targetDeptId;
+    }
+    return true;
+}
     if (!CU) return false;
     if (CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean') return true;
     if (CU.role !== 'head') return false;
@@ -2088,7 +2133,7 @@ function saveBundleCellModal(){
       const existingSubjType = getCourseType(existingSubj);
       const hasIT = getDepts().some(d => d.id === 'it');
 
-      // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
+   // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
       if (CU.dept === 'sup') {
           if (subj && subjType !== 'sup' && !(subjType === 'comp' && getAllowSupEditComp())) {
               showToastMsg('⛔ بصفتك رئيس قسم الدراسات العامة، يمكنك فقط إسناد مقررات الدراسات العامة.');
@@ -2099,7 +2144,18 @@ function saveBundleCellModal(){
               return;
           }
       } 
-      // 2. إذا كان المستخدم رئيس قسم تخصصي
+      // 2. إذا كان المستخدم رئيس قسم الحاسب
+      else if (CU.dept === 'it') {
+          if (subj && subjType !== 'comp' && ctx.deptId !== 'it' && !isCompCourseByName(subj)) {
+              showToastMsg('⛔ بصفتك رئيس قسم الحاسب، يمكنك فقط إسناد مقررات الحاسب في هذا القسم.');
+              return;
+          }
+          if (existingSubj && existingSubjType !== 'comp' && ctx.deptId !== 'it' && !isCompCourseByName(existingSubj)) {
+              showToastMsg('⛔ لا يمكنك تعديل أو حذف مقرر تابع لقسم آخر.');
+              return;
+          }
+      }
+      // 3. إذا كان المستخدم رئيس قسم تخصصي آخر
       else {
           if (!getAllowSupEdit()) {
               if (subjType === 'sup' || existingSubjType === 'sup') {
@@ -2556,6 +2612,8 @@ function editProgrammerName(){
 function gridTabHTML(deptId){
   let bundles = getBundles(deptId);
   const edit = canEdit(deptId);
+  // السماح بالتفاعل مع الجدول لرئيس الحاسب والدراسات في الأقسام الأخرى لإدارة مقرراتهم
+  const canEditGrid = edit || (CU && CU.role === 'head' && (CU.dept === 'it' || CU.dept === 'sup' || getAllowSupEdit()));
 
   if (deptId === 'sup') {
       const sets = buildSupItNameSets();
@@ -2632,11 +2690,11 @@ function gridTabHTML(deptId){
   }
 
   let gridArea='';
-  if(!bundles.length){
+ if(!bundles.length){
     gridArea=`<div class="empty"><div class="ei">📚</div><p>أضف رزمة جديدة من التخصص والمستوى لتبدأ ببناء الجدول، أو استخدم المعالج الذكي أعلاه.</p></div>`;
   }else if(currentBundleId){
     const bundle=bundles.find(b=>b.id===currentBundleId);
-    if(bundle)gridArea=renderBundleGrid(deptId,bundle,edit);
+    if(bundle)gridArea=renderBundleGrid(deptId,bundle,canEditGrid);
   }
 
   const tabsWrap=bundles.length?`<div class="bundle-tabs-wrap">${bundleTabs}</div>`:'';
