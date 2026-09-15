@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>نظام إعداد جداول الأقسام — المشروع الثاني | الكلية التقنية بعرعر</title>
+<title>نظام إعداد جداول الأقسام</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
@@ -261,7 +261,7 @@ td.day-cell:hover .cell-lock-toggle{opacity:1}
     <div class="llogo">
       <div class="gov-logo"><div class="fallback-logo">📅</div></div>
       <h1>نظام إعداد جداول الأقسام</h1>
-      <p>الكلية التقنية بعرعر</p>
+      <p id="login-college-name"></p>
       <p style="font-size:11px;opacity:.75">المؤسسة العامة للتدريب التقني والمهني</p>
     </div>
     <div class="lcard">
@@ -531,6 +531,33 @@ const SUP_CODES=['رياض-101','انجل-111','انجل-112','انجل-113','ا
 const IT_CODES=[];
 
 let CU=null, currentDept=null, deptActiveTab='grid', settingsTab='depts';
+  // تحويل اسم الوحدة التدريبية من رايات إلى الاسم الرسمي الكامل
+function formatCollegeName(raw) {
+  let s = (raw || '').trim();
+  if (!s) return 'الكلية التقنية';
+  
+  // فحص هل الكلية للبنات
+  const isGirls = s.includes('بنات') || s.includes('للبنات');
+  
+  // إزالة الكلمات الزائدة
+  let city = s.replace(/الكلية التقنية للبنات|الكلية التقنية بنات|الكلية التقنية|كلية التقنية|كلية/g, '')
+              .replace(/للبنات|بنات/g, '')
+              .trim();
+
+  // إزالة حرف الجر "بـ" أو "في" إن وجد في البداية
+  if (city.startsWith('بـ') || city.startsWith('في ')) {
+    city = city.replace(/^(بـ|في )/, '').trim();
+  } else if (city.startsWith('ب') && !city.startsWith('بيشة') && !city.startsWith('بدر') && !city.startsWith('بقيع') && !city.startsWith('بلجرشي')) {
+    city = city.substring(1).trim();
+  }
+
+  // تركيب الاسم الرسمي
+  if (isGirls) {
+    return `الكلية التقنية للبنات ب${city}`;
+  } else {
+    return `الكلية التقنية ب${city}`;
+  }
+}
   function getKnownDeptId(arabicName) {
   const n = arabicName || '';
   if(n.includes('الحاسب')) return 'it';
@@ -943,9 +970,9 @@ function doLogin(){
 function doLogout(){sessionStorage.removeItem('pq_cu');CU=null;location.reload();}
 window.onload=()=>{
   applyLoginLogo();
-  // تحديث اسم الكلية في شاشة تسجيل الدخول
-  const loginTitle = document.querySelector('.llogo p:first-of-type');
-  if(loginTitle) loginTitle.textContent = ls('pq_college_name', 'الكلية التقنية بعرعر');
+  const collegeName = ls('pq_college_name', 'الكلية التقنية');
+  const loginTitle = document.getElementById('login-college-name');
+  if(loginTitle) loginTitle.textContent = collegeName;
   
   try{const c=sessionStorage.getItem('pq_cu');if(c){CU=JSON.parse(c);showApp();}}catch{}
 };
@@ -1007,7 +1034,7 @@ function showApp(){
   document.getElementById('tbR').textContent=RLBL[CU.role]||CU.role;
   
   // سحب اسم الكلية المحفوظ وعرضه في الشريط العلوي
-  const collegeName = ls('pq_college_name', 'الكلية التقنية بعرعر');
+  const collegeName = ls('pq_college_name', 'الكلية التقنية');
   const tbT = document.getElementById('tbT');
   if(tbT) tbT.textContent = 'جداول الأقسام — ' + collegeName;
 
@@ -10063,6 +10090,7 @@ function parseBannerRows(rows){
   const iInsName=exactIdx('اسم المدرب')>-1?exactIdx('اسم المدرب'):findColIndex(header,['اسم المدرب','مدرب']);
   const iInsNo=exactIdx('رقم المدرب');
   const iDept=findColIndex(header,['القسم']);
+    const iUnit=findColIndex(header,['الوحدة التدريبية']);
   const iSectionType=findColIndex(header,['نوع الشعبة','نوع التدريب']);
   const iSchedType=exactIdx('نوع الجدولة');
   if(iCrn===-1)return null;
@@ -10082,6 +10110,7 @@ function parseBannerRows(rows){
       building:val(iBuilding),
       room:val(iRoom),
       dept:val(iDept),
+      unit:val(iUnit),
       // نوع المحاضرة: نفضّل عمود "نوع الجدولة" (نظري/عملي/عن بُعد مباشرة)، وإلا نرجع لـ"نوع الشعبة"
       // (يحتوي أحياناً على "عملي صباحي"/"نظري مسائي" فنبسّطه لتجاهل لاحقة الفترة)
       cellType:normalizeBannerSectionType(val(iSchedType))||normalizeBannerSectionType(val(iSectionType)),
@@ -11299,6 +11328,19 @@ function submitUnitSS01() {
     let depts = getDepts();
     let totalAdded = 0;
     let newDeptsCreated = 0;
+
+    // استخراج اسم الكلية بذكاء من أول سطر يحتوي على اسم الوحدة التدريبية
+    const firstRowWithUnit = bannerRows.find(r => r.unit && r.unit.trim());
+    if (firstRowWithUnit && firstRowWithUnit.unit) {
+      const detectedName = formatCollegeName(firstRowWithUnit.unit);
+      ss('pq_college_name', detectedName);
+      
+      const tbT = document.getElementById('tbT');
+      if (tbT) tbT.textContent = 'جداول الأقسام — ' + detectedName;
+      
+      const loginTitle = document.getElementById('login-college-name');
+      if (loginTitle) loginTitle.textContent = detectedName;
+    }
     
     bannerRows.forEach(r => {
       let deptName = (r.dept || '').trim();
