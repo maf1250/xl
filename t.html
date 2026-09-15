@@ -1132,35 +1132,7 @@ function _migrateV8(){
   if(ls('pq_migrate_v8',false))return;
   ss('pq_migrate_v8',true);
 }
-// إعادة تحميل قسرية لمقررات الحاسب في biz
-function forceReloadPlans(){
-  if(!confirm('سيتم إعادة تحميل مقررات الحاسب (101/102) في جميع خطط تقنية الأعمال.\nهل تريد المتابعة؟'))return;
-  ['pq_migrate_v7','pq_migrate_v8'].forEach(k=>{try{localStorage.removeItem(k);}catch(e){}});
-  _enforceCompInBiz();
-  _migrateV9();
-  const t=document.getElementById('reloadToast');
-  if(t){t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
-  showToastMsg('✅ تم إعادة تحميل مقررات الحاسب في جميع الخطط');
-  setTimeout(()=>{renderSettings();},300);
-}
-// يُنفَّذ في كل تحميل — يضمن وجود حاسب-101/102 في جميع خطط biz (بدون حذفها من خطة it — هذي المقررات
-// مطلوبة أيضاً ضمن خطة قسم الحاسب نفسه، والحذف التلقائي القديم هنا كان يمسحها في كل مرة يُفتح البرنامج)
-function _enforceCompInBiz(){
-  const COMP=['حاسب-101','حاسب-102'];
-  if(typeof SEED_PLANS_BIZ==='undefined')return;
-  const allComp=[];
-  Object.values(SEED_PLANS_BIZ).forEach(courses=>{
-    courses.forEach(c=>{if(COMP.includes(c.code)&&!allComp.find(x=>x.code===c.code&&x.level===c.level))allComp.push(c);});
-  });
-  // تحديث المستويات إن كانت بالاسم القديم
-  const LVL_MAP={'الفصل التدريبي الأول':'المستوى الأول','الفصل التدريبي الثاني':'المستوى الثاني','الفصل التدريبي الثالث':'المستوى الثالث','الفصل التدريبي الرابع':'المستوى الرابع','الفصل التدريبي الخامس':'المستوى الخامس'};
-  allComp.forEach(c=>{if(LVL_MAP[c.level])c.level=LVL_MAP[c.level];});
-  getSpecs('biz').forEach(sp=>{
-    const plan=getPlan('biz',sp.id);let ch=false;
-    allComp.forEach(c=>{if(!plan.find(x=>x.code===c.code)){plan.push(c);ch=true;}});
-    if(ch)savePlan('biz',sp.id,plan);
-  });
-}
+
 function _migrateV9(){
   if(ls('pq_migrate_v9',false))return;
   const MAP={
@@ -5267,10 +5239,7 @@ function deptsSettingsHTML(){
     ${depts.map((d,i)=>`<div class="fld"><label>القسم ${i+1}</label><input type="text" value="${esc(d.name)}" onchange="renameDept('${d.id}',this.value)"/></div>`).join('')}
     <div class="toast" id="deptToast">✅ تم الحفظ</div>
   </div>
-  <div class="panel"><h3>🔄 إعادة تشغيل البيانات الأساسية</h3>
-  <p style="font-size:12px;color:var(--mu);margin-bottom:10px">إذا كانت مقررات الحاسب أو مقررات أخرى لا تظهر بشكل صحيح، انقر هنا لإعادة تحميلها من البيانات الأصلية.</p>
-  <button class="bpri" onclick="forceReloadPlans()">🔄 إعادة تحميل الخطط والمقررات</button>
-  <div class="toast" id="reloadToast">✅ تم إعادة التحميل</div></div>
+
   <div class="panel"><h3>🔀 نقل بيانات قسم إلى قسم آخر</h3><div class="g2"><div class="fld"><label>من</label><select id="tx-from">${depts.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select></div><div class="fld"><label>إلى</label><select id="tx-to">${depts.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select></div></div><button class="bdng" onclick="transferDeptDataConfirm()">🔀 نقل كل البيانات</button><div class="toast" id="txToast">✅ تم النقل</div></div>`;
 }
 function renameDept(id,val){const d=getDepts(),x=d.find(y=>y.id===id);if(x&&val.trim()){x.name=val.trim();saveDepts(d);buildSidebar();const t=document.getElementById('deptToast');if(t){t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000);}}}
@@ -11300,7 +11269,7 @@ function renderUnitWizardStep1() {
       <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:12px;color:#1e40af;margin-bottom:16px;line-height:1.7">
         <b>💡 تقرير SS01 الشامل:</b><br/>
         يرجى رفع ملف <b>جداول الوحدة التدريبية طولي (SS01)</b> الشامل لجميع أقسام الكلية للفصل التدريبي الجديد.<br/>
-        سيقوم النظام تلقائياً بفرز وتوزيع الشعب على أقسامها المناسبة بحسب عمود «القسم».
+        سيقوم النظام تلقائياً بفرز وتوزيع الشعب على أقسامها المناسبة.
       </div>
 
       <div class="fld" style="margin-bottom:18px">
