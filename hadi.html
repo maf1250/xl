@@ -2514,7 +2514,7 @@ function gridTabHTML(deptId){
       getDepts().forEach(d => {
           if (d.id === deptId) return;
           getBundles(d.id).forEach(b => {
-              const cleanDeptName = d.name.replace('تقنية ', '').replace('التقنية ', '');
+              const cleanDeptName = (d.name || '').replace(/^(التقنية|تقنية)\s+/i, '').trim();
               crossBundles.push({ ...b, name: `${b.name} (${cleanDeptName})`, actualDeptId: d.id });
           });
       });
