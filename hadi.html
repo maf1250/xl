@@ -544,7 +544,8 @@ function isCompCourseByName(name) {
   return /تطبيقات الحاسب|مقدمة تطبيقات الحاسب|تطبيقات الحاسب المتقدمة|حاسب آلي|حاسب الي/.test(n);
 }
 
-let CU=null, currentDept=null, deptActiveTab='grid', settingsTab='depts';
+let CU = null, currentDept = null, deptActiveTab = 'grid', settingsTab = 'depts';
+
 // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
 function canUserManageCourse(cName, cCat, targetDeptId) {
     if (!CU) return false;
@@ -555,9 +556,13 @@ function canUserManageCourse(cName, cCat, targetDeptId) {
     // إذا كانت الفئة تشير لنوع المحاضرة (عملي/نظري) أو غير محددة، نحددها بدقة من اسم المقرر
     if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || cat === 'remote' || cat === 'selfstudy' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
         const sets = buildSupItNameSets();
-        if (sets.supNames.has(cName) || isSupCourseByName(cName)) cat = 'sup';
-        else if (sets.itNames.has(cName) || isCompCourseByName(cName)) cat = 'comp';
-        else cat = 'dept';
+        if (sets.supNames.has(cName) || isSupCourseByName(cName)) {
+            cat = 'sup';
+        } else if (sets.itNames.has(cName) || isCompCourseByName(cName)) {
+            cat = 'comp';
+        } else {
+            cat = 'dept';
+        }
     }
 
     const hasIT = getDepts().some(d => d.id === 'it');
@@ -11263,15 +11268,9 @@ window.openAutoDistWizard = function(dId) {
             document.body.appendChild(modal);
         }
 
-        function isSupCourseByName(name) {
-            if (!name) return false;
-            const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
-            return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
-        }
-
         function isCourseMyResponsibility(c, targetDeptId) {
             if (isSup) return c.cat === 'sup' || isSupCourseByName(c.name);
-            if (isIt) return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp';
+            if (isIt) return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp' || isCompCourseByName(c.name);
             return c.cat === 'dept';
         }
         
@@ -11331,7 +11330,7 @@ window.openAutoDistWizard = function(dId) {
         let coursesHtml = `<div style="max-height:300px;overflow-y:auto;border:1.5px solid var(--bd);border-radius:8px;padding:12px;background:#f8fafc">`;
         uniqueCourses.forEach(c => {
             const catBadge = (c.cat === 'sup' || isSupCourseByName(c.name)) ? `<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">دراسات عامة</span>` : 
-                             c.cat === 'comp' ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">حاسب مشترك</span>` : 
+                             (c.cat === 'comp' || isCompCourseByName(c.name)) ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">حاسب مشترك</span>` : 
                              `<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">تخصص</span>`;
             
             const uniqueKey = (c.code || c.name).trim();
