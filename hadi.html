@@ -553,7 +553,6 @@ function canUserManageCourse(cName, cCat, targetDeptId) {
     if (CU.role !== 'head') return false;
 
     let cat = cCat;
-    // إذا كانت الفئة تشير لنوع المحاضرة (عملي/نظري) أو غير محددة، نحددها بدقة من اسم المقرر
     if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || cat === 'remote' || cat === 'selfstudy' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
         const sets = buildSupItNameSets();
         if (sets.supNames.has(cName) || isSupCourseByName(cName)) {
@@ -575,53 +574,6 @@ function canUserManageCourse(cName, cCat, targetDeptId) {
     }
 
     // 2. رئيس قسم الحاسب: له صلاحية على مقررات الحاسب المشتركة أينما وُجدت
-    if (CU.dept === 'it') {
-        if (cat === 'comp' || isCompCourseByName(cName)) return true;
-        if (targetDeptId === 'it' && cat === 'dept') return true;
-        if (cat === 'sup' && getAllowSupEdit()) return true;
-        return false;
-    }
-
-  // دالة التعرف على مقررات الدراسات العامة بالاسم
-function isSupCourseByName(name) {
-  if (!name) return false;
-  const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
-  return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
-}
-
-// دالة التعرف على مقررات الحاسب المشتركة بالاسم
-function isCompCourseByName(name) {
-  if (!name) return false;
-  const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
-  return /تطبيقات الحاسب|مقدمة تطبيقات الحاسب|تطبيقات الحاسب المتقدمة|حاسب آلي|حاسب الي/.test(n);
-}
-
-let CU = null, currentDept = null, deptActiveTab = 'grid', settingsTab = 'depts';
-
-// فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
-function canUserManageCourse(cName, cCat, targetDeptId) {
-    if (!CU) return false;
-    if (CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean') return true;
-    if (CU.role !== 'head') return false;
-
-    let cat = cCat;
-    if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || cat === 'remote' || cat === 'selfstudy' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
-        const sets = buildSupItNameSets();
-        if (sets.supNames.has(cName) || isSupCourseByName(cName)) cat = 'sup';
-        else if (sets.itNames.has(cName) || isCompCourseByName(cName)) cat = 'comp';
-        else cat = 'dept';
-    }
-
-    const hasIT = getDepts().some(d => d.id === 'it');
-
-    // 1. رئيس قسم الدراسات العامة
-    if (CU.dept === 'sup') {
-        if (cat === 'sup') return true;
-        if (cat === 'comp' && (!hasIT || getAllowSupEditComp())) return true;
-        return false;
-    }
-
-    // 2. رئيس قسم الحاسب
     if (CU.dept === 'it') {
         if (cat === 'comp' || isCompCourseByName(cName)) return true;
         if (targetDeptId === 'it' && cat === 'dept') return true;
