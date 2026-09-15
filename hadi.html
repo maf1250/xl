@@ -530,6 +530,13 @@ const SUP_CODES=['رياض-101','انجل-111','انجل-112','انجل-113','ا
 // مقررات الحاسب تبقى في خطط قسم تقنية الأعمال وتُرحَّل للجدول العام لقسم الحاسب فقط للعرض
 const IT_CODES=[];
 
+// دالة التعرف على مقررات الدراسات العامة بالاسم
+function isSupCourseByName(name) {
+  if (!name) return false;
+  const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
+  return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
+}
+
 let CU=null, currentDept=null, deptActiveTab='grid', settingsTab='depts';
   // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
 function canUserManageCourse(cName, cCat, targetDeptId) {
