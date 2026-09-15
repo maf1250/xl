@@ -2500,8 +2500,7 @@ function gridTabHTML(deptId){
   let bundles = getBundles(deptId);
   const edit = canEdit(deptId);
 
-  // إذا كان القسم دراسات عامة أو حاسب، نجلب الرزم التي تخدم الأقسام الأخرى
-  if (deptId === 'sup' || deptId === 'it') {
+  if (deptId === 'sup') {
       const sets = buildSupItNameSets();
       const isMyCourse = (subj) => {
           if (!subj) return false;
@@ -2519,9 +2518,8 @@ function gridTabHTML(deptId){
           });
       });
 
-      // دمج الرزم: لقسم الحاسب ندمج رزم طلابه مع رزم الأقسام الأخرى، ولدراسات عامة نعرض الرزم المدمجة
-      if (crossBundles.length > 0) {
-          bundles = (deptId === 'it') ? [...bundles, ...crossBundles] : crossBundles;
+     if (crossBundles.length > 0) {
+          bundles = crossBundles;
       }
   }
 
@@ -2687,11 +2685,27 @@ function setupHTML(deptId){
       <div class="fld" id="new-sec-level-wrap" style="display:none"><label>المستوى</label><select id="new-sec-level"></select></div>
       `:''}
     </div>
-    <div class="panel"><h3>👨‍🏫 المدربون (${ins.length})</h3>
+  <div class="panel">
+      <h3>👨‍🏫 المدربون (${ins.length})</h3>
       <div class="rlist">${insListHTML}</div>
       <div style="display:flex;gap:6px;margin-top:12px">
-        <input type="text" id="new-ins" placeholder="اسم المدرّب" onkeydown="if(event.key==='Enter')addInstructor('${deptId}')" style="flex:1;background:#f8fafc;border:1.5px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:var(--tx)"/>
-        <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addInstructor('${deptId}')">+</button>
+        <input type="text" id="new-ins" list="all-college-ins-list" placeholder="اختر من مدربي الكلية المتاحين أو اكتب اسماً جديداً..." onkeydown="if(event.key==='Enter')addInstructor('${deptId}')" style="flex:1;background:#f8fafc;border:1.5px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:var(--tx)"/>
+        <datalist id="all-college-ins-list">
+          ${(()=>{
+            const currentInsNames = new Set(ins.map(i => i.name));
+            const otherIns = [];
+            getDepts().forEach(d => {
+              getInstructors(d.id).forEach(i => {
+                if (!currentInsNames.has(i.name)) {
+                  currentInsNames.add(i.name);
+                  otherIns.push(i);
+                }
+              });
+            });
+            return otherIns.map(i => `<option value="${esc(i.name)}">${i.empNo ? `(رقم: ${esc(i.empNo)})` : ''}</option>`).join('');
+          })()}
+        </datalist>
+        <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addInstructor('${deptId}')">➕ إضافة</button>
       </div>
     </div>
     <div class="panel"><h3>🚪 القاعات التدريبية (${rooms.length})</h3>
@@ -2825,9 +2839,40 @@ function addSection(deptId){
 }
 
 function addInstructor(deptId){
-  const inp=document.getElementById('new-ins');const v=inp.value.trim();if(!v)return;
-  const arr=getInstructors(deptId);arr.push({id:genId(),name:v});saveInstructors(deptId,arr);
-  inp.value='';renderDeptTabContent(deptId);
+  const inp = document.getElementById('new-ins');
+  const v = inp.value.trim();
+  if(!v) return;
+  const arr = getInstructors(deptId);
+  
+  if (arr.some(i => i.name === v)) {
+    showToastMsg('⚠️ هذا المدرب مضاف مسبقاً في هذا القسم');
+    return;
+  }
+
+  // البحث هل المدرب موجود مسبقاً في أي قسم آخر بالكلية لنسخ بياناته وسجله
+  let existingObj = null;
+  for (let d of getDepts()) {
+    const found = getInstructors(d.id).find(i => i.name === v);
+    if (found) { existingObj = found; break; }
+  }
+
+  if (existingObj) {
+    arr.push({
+      id: genId(),
+      name: existingObj.name,
+      empNo: existingObj.empNo || '',
+      rank: existingObj.rank || '',
+      historyCourses: existingObj.historyCourses ? [...existingObj.historyCourses] : []
+    });
+    showToastMsg(`✅ تم إضافة المدرب "${v}" مع بياناته وسجل مقرراته السابقة`);
+  } else {
+    arr.push({ id: genId(), name: v });
+    showToastMsg(`✅ تم إضافة المدرب "${v}"`);
+  }
+
+  saveInstructors(deptId, arr);
+  inp.value = '';
+  renderDeptTabContent(deptId);
 }
 
 function addSubject(deptId){
@@ -11025,13 +11070,9 @@ window.openAutoDistWizard = function(dId) {
         const isSup = (dId === 'sup');
         const isIt = (dId === 'it');
 
-        // الدراسات العامة تبحث في جميع أقسام الكلية (ما عدا نفسها لأنها بلا تخصصات)
-        // الحاسب يبحث في كل الكلية لجلب مقرراته والحاسب المشترك
-        // الأقسام التخصصية تبحث في قسمها فقط
+    // الدراسات العامة فقط تبحث في كل الكلية، بينما الحاسب والأقسام الأخرى تبحث في قسمها فقط
         const departmentsToScan = isSup 
             ? getDepts().filter(d => d.id !== 'sup') 
-            : isIt 
-            ? getDepts() 
             : [getDepts().find(d => d.id === dId)].filter(Boolean);
         
         const totalSpecs = departmentsToScan.reduce((acc, d) => acc + getSpecs(d.id).length, 0);
@@ -11175,13 +11216,19 @@ window.applyWizardSS07Mapping = function(dId) {
         const checkboxes = document.querySelectorAll('.wiz-course-ins');
         let mappedCount = 0;
 
+        const clean = s => (s || '').replace(/[\u064B-\u0652\u0670\s\-()]/g, '').replace(/[إأآا]/g, 'ا').replace(/ة/g, 'ه').replace(/[يى]/g, 'ي').toLowerCase();
+
         checkboxes.forEach(cb => {
             const cName = cb.getAttribute('data-course');
             const insId = cb.value;
             const ins = insList.find(i => i.id === insId);
             
-            if (ins && ins.historyCourses) {
-                const hasCourse = ins.historyCourses.some(hc => hc.replace(/\s+/g, '') === cName.replace(/\s+/g, ''));
+            if (ins && ins.historyCourses && ins.historyCourses.length > 0) {
+                const target = clean(cName);
+                const hasCourse = ins.historyCourses.some(hc => {
+                    const h = clean(hc);
+                    return h === target || target.includes(h) || h.includes(target);
+                });
                 if (hasCourse) {
                     cb.checked = true;
                     mappedCount++;
@@ -11190,9 +11237,9 @@ window.applyWizardSS07Mapping = function(dId) {
         });
 
         if (mappedCount > 0) {
-            showToastMsg(`✅ تم استنتاج ووضع ${mappedCount} علامة ربط بناءً على تقرير (SS07)`);
+            showToastMsg(`✅ تم استنتاج وتحديد ${mappedCount} ارتباط للمدربين بناءً على تقرير (SS07)`);
         } else {
-            showToastMsg('ℹ️ لم يتم العثور على مقررات سابقة للمدربين. تأكد من رفع تقرير (SS07) في قسمك.');
+            showToastMsg('ℹ️ لم يتم العثور على مقررات سابقة مطابقة لهؤلاء المدربين.');
         }
     } catch (err) {
         console.error(err);
@@ -11713,7 +11760,8 @@ function processGlobalSS07(text) {
     const iDept = findColIndex(header, ['القسم']); 
     const iRoom = findColIndex(header, ['رقم القاعة', 'قاعة']);
     const iBuilding = findColIndex(header, ['المبنى', 'مبنى']);
-    const iCourseName = findColIndex(header, ['وصف المقرر', 'اسم المقرر', 'المقرر']);
+    const iCourseCode = header.indexOf('المقرر');
+    const iCourseName = header.indexOf('وصف المقرر') > -1 ? header.indexOf('وصف المقرر') : findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
 
     if (iInsName === -1 || iDept === -1) {
         showToastMsg('❌ ملف المدربين غير صالح (لا يحتوي على عمود القسم أو الاسم).');
@@ -11762,11 +11810,11 @@ function processGlobalSS07(text) {
             } else if (empNo && !ins.empNo) {
                 ins.empNo = empNo;
             }
-            const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
-            if (cName) {
-                if (!ins.historyCourses) ins.historyCourses = [];
-                if (!ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
-            }
+           const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
+            const cCode = iCourseCode > -1 ? String(r[iCourseCode] || '').trim() : '';
+            if (!ins.historyCourses) ins.historyCourses = [];
+            if (cName && !ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
+            if (cCode && !ins.historyCourses.includes(cCode)) ins.historyCourses.push(cCode);
         }
 
         const roomName = iRoom > -1 ? String(r[iRoom] || '').trim() : '';
