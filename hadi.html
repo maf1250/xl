@@ -11385,7 +11385,7 @@ async function submitUnitStep2() {
   const ss07Input = document.getElementById('wiz-all-ss07');
   const btn = document.getElementById('btn-finish-wiz');
   
-  if(sc04Input.files.length === 0 && ss07Input.files.length === 0) {
+  if (sc04Input.files.length === 0 && ss07Input.files.length === 0) {
       showToastMsg('⚠️ الرجاء تحديد ملف واحد على الأقل أو الضغط على تخطي.');
       return;
   }
@@ -11393,14 +11393,15 @@ async function submitUnitStep2() {
   btn.textContent = "⏳ جاري الفرز والمعالجة...";
   btn.disabled = true;
 
-  const readAsText = (file) => new Promise((resolve) => {
+  const readAsText = (file) => new Promise((resolve, reject) => {
       const r = new FileReader();
       r.onload = e => resolve(e.target.result);
+      r.onerror = e => reject(e);
       r.readAsText(file, 'UTF-8');
   });
 
   try {
-      // 1. معالجة وتوزيع الخطط SC04 المتعددة
+      // 1. معالجة وتوزيع الخطط SC04 لجميع الملفات المرفوعة
       if (sc04Input.files.length > 0) {
           for (let i = 0; i < sc04Input.files.length; i++) {
               const text = await readAsText(sc04Input.files[i]);
@@ -11414,7 +11415,7 @@ async function submitUnitStep2() {
           processGlobalSS07(text);
       }
 
-      showToastMsg('🎉 اكتمل بناء النظام، تم فرز وتوزيع الخطط والمدربين بنجاح!');
+      showToastMsg(`🎉 اكتمل البناء: تم حفظ جميع التخصصات المرفوعة بنجاح!`);
       closeUnitReportsWizard();
       renderHome();
       
@@ -11426,10 +11427,10 @@ async function submitUnitStep2() {
   }
 }
 
-// دالة لمعالجة وتوزيع ملف SC04 بذكاء
 function processGlobalSC04(text) {
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     const rows = parseCSV(text);
-    const data = rows.slice(1).filter(r => r.length >= 16 && r[12] && r[12].trim());
+    const data = rows.slice(1).filter(r => r.length >= 13 && r[12] && r[12].trim());
     if (!data.length) return;
 
     const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
@@ -11437,7 +11438,8 @@ function processGlobalSC04(text) {
 
     const bySpec = {};
     data.forEach(r => {
-        const sp = (r[4] || '').trim(); if (!sp) return;
+        const sp = (r[4] || '').trim(); 
+        if (!sp) return;
         const code = (r[11] || '').trim();
         const name = (r[12] || '').trim();
         if (!name || code.startsWith('أو >>')) return;
@@ -11456,37 +11458,58 @@ function processGlobalSC04(text) {
         else if (COMP_SHARED_EXACT.some(c => code.includes(c))) cat = 'comp';
         
         if (!bySpec[sp]) bySpec[sp] = [];
-        bySpec[sp].push({ code, name, level, credit, ch, sessions, lecture: mh, practical: am, training: tm, cat, prereq: (r[13] || '').trim(), equiv: (r[14] || '').trim() });
+        bySpec[sp].push({ 
+            code, name, level, credit, ch, sessions, 
+            lecture: mh, practical: am, training: tm, cat, 
+            prereq: (r[13] || '').trim(), equiv: (r[14] || '').trim() 
+        });
     });
 
     let depts = getDepts();
 
     Object.keys(bySpec).forEach(spName => {
         let matchedDeptId = null;
-        
-        // البحث عن القسم الذي يملك هذا التخصص
+
+        // 1. البحث أولاً: هل التخصص موجود مسبقاً في أي قسم؟
         for (let d of depts) {
-            if (getSpecs(d.id).some(s => s.name === spName) || d.name.includes(spName.replace('تقنيات', 'تقنية').trim())) {
+            if (getSpecs(d.id).some(s => s.name === spName)) {
                 matchedDeptId = d.id;
                 break;
             }
         }
-        
-        // التخمين الذكي إذا لم نجد القسم
+
+        // 2. البحث ثانياً: هل اسم التخصص يشابه اسم قسم قائم؟
         if (!matchedDeptId) {
-            let baseId = getKnownDeptId(spName); 
+            for (let d of depts) {
+                const normD = d.name.replace(/التقنية|تقنية/g, '').trim();
+                const normS = spName.replace(/التقنية|تقنية/g, '').trim();
+                if (normS.includes(normD) || normD.includes(normS)) {
+                    matchedDeptId = d.id;
+                    break;
+                }
+            }
+        }
+
+        // 3. التخمين عبر الكود البرمجي getKnownDeptId
+        if (!matchedDeptId) {
+            let baseId = getKnownDeptId(spName);
             let dept = depts.find(d => d.id === baseId);
             if (dept) {
                 matchedDeptId = dept.id;
             } else {
+                // إذا لم يُعثر على القسم، يتم ربطه بأول قسم حاسوبي أو إنشاؤه
                 matchedDeptId = baseId;
                 let counter = 1;
-                while(depts.find(d => d.id === matchedDeptId)) { matchedDeptId = baseId + counter; counter++; }
-                depts.push({id: matchedDeptId, name: spName}); 
+                while (depts.find(d => d.id === matchedDeptId)) { 
+                    matchedDeptId = baseId + counter; 
+                    counter++; 
+                }
+                depts.push({ id: matchedDeptId, name: spName }); 
                 saveDepts(depts);
             }
         }
 
+        // حفظ التخصص في القسم الصحيح
         let specs = getSpecs(matchedDeptId);
         let spObj = specs.find(s => s.name === spName);
         if (!spObj) {
@@ -11494,6 +11517,8 @@ function processGlobalSC04(text) {
             specs.push(spObj);
             saveSpecs(matchedDeptId, specs);
         }
+        
+        // حفظ مواد الخطة للتخصص
         savePlan(matchedDeptId, spObj.id, bySpec[spName]);
     });
 }
