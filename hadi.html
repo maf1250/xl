@@ -2702,18 +2702,34 @@ function setupHTML(deptId){
                 }
               });
             });
-            return otherIns.map(i => `<option value="${esc(i.name)}">${i.empNo ? `(رقم: ${esc(i.empNo)})` : ''}</option>`).join('');
+            return otherIns.map(i => `<option value="${esc(i.name)}"></option>`).join('');
           })()}
         </datalist>
         <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addInstructor('${deptId}')">➕ إضافة</button>
       </div>
     </div>
-    <div class="panel"><h3>🚪 القاعات التدريبية (${rooms.length})</h3>
+   <div class="panel">
+      <h3>🚪 القاعات التدريبية (${rooms.length})</h3>
       <div class="rlist">${roomsListHTML}</div>
       ${rooms.length?`<button class="bgr" style="margin-top:8px;font-size:11px;padding:6px 10px" onclick="autoFillRoomBuildings('${deptId}')">🤖 تعبئة أرقام المباني تلقائياً (أول 5 أرقام من رقم القاعة)</button>`:''}
       <div style="display:flex;gap:6px;margin-top:12px">
-        <input type="text" id="new-room" placeholder="مثال: معمل حاسب 1" onkeydown="if(event.key==='Enter')addRoom('${deptId}')" style="flex:1;background:#f8fafc;border:1.5px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:var(--tx)"/>
-        <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addRoom('${deptId}')">+</button>
+        <input type="text" id="new-room" list="all-college-rooms-list" placeholder="اختر من قاعات ومعامل الوحدة المتاحة أو اكتب اسماً جديداً..." onkeydown="if(event.key==='Enter')addRoom('${deptId}')" style="flex:1;background:#f8fafc;border:1.5px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:var(--tx)"/>
+        <datalist id="all-college-rooms-list">
+          ${(()=>{
+            const currentRoomNames = new Set(rooms.map(r => r.name));
+            const otherRooms = [];
+            getDepts().forEach(d => {
+              getRooms(d.id).forEach(r => {
+                if (!currentRoomNames.has(r.name)) {
+                  currentRoomNames.add(r.name);
+                  otherRooms.push(r);
+                }
+              });
+            });
+            return otherRooms.map(r => `<option value="${esc(r.name)}">${r.building ? `(مبنى: ${esc(r.building)})` : ''}</option>`).join('');
+          })()}
+        </datalist>
+        <button class="bpri" style="padding:8px 14px;font-size:12px" onclick="addRoom('${deptId}')">➕ إضافة</button>
       </div>
     </div>
     <div class="panel"><h3>📚 مقررات إضافية (${subs.length})</h3>
@@ -2840,7 +2856,16 @@ function addSection(deptId){
 
 function addInstructor(deptId){
   const inp = document.getElementById('new-ins');
-  const v = inp.value.trim();
+  let v = inp.value.trim();
+  if(!v) return;
+
+  for (let d of getDepts()) {
+    const found = getInstructors(d.id).find(i => i.name === v || i.empNo === v || (i.empNo && v.includes(i.empNo)));
+    if (found) {
+      v = found.name;
+      break;
+    }
+  }
   if(!v) return;
   const arr = getInstructors(deptId);
   
@@ -2882,9 +2907,37 @@ function addSubject(deptId){
 }
 
 function addRoom(deptId){
-  const inp=document.getElementById('new-room');const v=inp.value.trim();if(!v)return;
-  const arr=getRooms(deptId);arr.push({id:genId(),name:v});saveRooms(deptId,arr);
-  inp.value='';renderDeptTabContent(deptId);
+  const inp = document.getElementById('new-room');
+  const v = inp.value.trim();
+  if(!v) return;
+  const arr = getRooms(deptId);
+  
+  if (arr.some(r => r.name === v)) {
+    showToastMsg('⚠️ هذه القاعة مضافة مسبقاً في هذا القسم');
+    return;
+  }
+
+  // البحث هل القاعة مسجلة في أي قسم آخر بالكلية لجلب بيانات المبنى الخاصة بها
+  let existingObj = null;
+  for (let d of getDepts()) {
+    const found = getRooms(d.id).find(r => r.name === v);
+    if (found) { existingObj = found; break; }
+  }
+
+  const building = existingObj && existingObj.building 
+    ? existingObj.building 
+    : deriveBuildingFromRoomName(v);
+
+  arr.push({
+    id: genId(),
+    name: v,
+    building: building || ''
+  });
+
+  saveRooms(deptId, arr);
+  inp.value = '';
+  renderDeptTabContent(deptId);
+  showToastMsg(`✅ تم إضافة القاعة "${v}" ${building ? `(مبنى ${building})` : ''}`);
 }
 
 function renameItem(type,deptId,id){
