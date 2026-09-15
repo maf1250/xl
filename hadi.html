@@ -531,6 +531,45 @@ const SUP_CODES=['رياض-101','انجل-111','انجل-112','انجل-113','ا
 const IT_CODES=[];
 
 let CU=null, currentDept=null, deptActiveTab='grid', settingsTab='depts';
+  // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
+function canUserManageCourse(cName, cCat, targetDeptId) {
+    if (!CU) return false;
+    if (CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean') return true;
+    if (CU.role !== 'head') return false;
+
+    let cat = cCat;
+    if (!cat && cName) {
+        const sets = buildSupItNameSets();
+        if (sets.supNames.has(cName) || isSupCourseByName(cName)) cat = 'sup';
+        else if (sets.itNames.has(cName)) cat = 'comp';
+        else cat = 'dept';
+    }
+
+    const hasIT = getDepts().some(d => d.id === 'it');
+
+    // 1. رئيس قسم الدراسات العامة: له صلاحية على مواد الدراسات فقط
+    if (CU.dept === 'sup') {
+        if (cat === 'sup') return true;
+        if (cat === 'comp' && (!hasIT || getAllowSupEditComp())) return true;
+        return false;
+    }
+
+    // 2. رئيس قسم الحاسب
+    if (CU.dept === 'it') {
+        if (cat === 'comp') return true;
+        if (targetDeptId === 'it' && cat === 'dept') return true;
+        if (cat === 'sup' && getAllowSupEdit()) return true;
+        return false;
+    }
+
+    // 3. رؤساء الأقسام التخصصية (الميكانيكية، الأعمال، الكهربائية...)
+    if (cat === 'sup') return getAllowSupEdit();
+    if (cat === 'comp') return false;
+    if (targetDeptId && targetDeptId !== 'sup') {
+        return CU.dept === targetDeptId;
+    }
+    return true;
+}
   // تحويل اسم الوحدة التدريبية من رايات إلى الاسم الرسمي الكامل
 function formatCollegeName(raw) {
   let s = (raw || '').trim();
@@ -2275,8 +2314,10 @@ function dragCourseChip(e,el){chipDragSubj=el.getAttribute('data-course');bundle
 function dropBundleOrChip(e,dId,bundleId,di,pi){
   e.preventDefault();e.currentTarget.classList.remove('dragover');
   {const _bg=getBundleGrid(bundleId);const _destB=_bg[di]&&_bg[di][pi];if(_destB&&_destB.locked){showToastMsg('🔒 المحاضرة مقفلة');chipDragSubj=null;bundleDragSrc=null;return;}}
-  if(chipDragSubj!==null){
-    const subj=chipDragSubj;chipDragSubj=null;bundleDragSrc=null;
+  if(!canUserManageCourse(subj, null, dId)){
+      showToastMsg('⛔ خرق صلاحية: ليس لديك صلاحية لإسناد أو سحب هذا المقرر.');
+      return;
+    }
     const g=getBundleGrid(bundleId);const ex=g[di]&&g[di][pi]||{};
     // إذا الخلية ممتدة من محاضرة سابقة، امنع الإفلات المباشر
     if(ex.extendedFrom!==undefined){showToastMsg('⚠️ هذه الخلية ممتدة من محاضرة سابقة — استخدم "مقرر في النصف الآخر"');return;}
@@ -2317,6 +2358,12 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
   if(!bundleDragSrc)return;
   const {di:sd,pi:sp}=bundleDragSrc;bundleDragSrc=null;
   if(sd===di&&sp===pi)return;
+  const gCheck = getBundleGrid(bundleId);
+  const movingCell = gCheck[sd][sp];
+  if(movingCell && movingCell.subj && !canUserManageCourse(movingCell.subj, null, dId)){
+    showToastMsg('⛔ لا يمكنك تحريك مقرر تابع لقسم آخر.');
+    return;
+  }
   {const _bg2=getBundleGrid(bundleId);const _srcB=_bg2[sd]&&_bg2[sd][sp];const _dstB=_bg2[di]&&_bg2[di][pi];if((_srcB&&_srcB.locked)||(_dstB&&_dstB.locked)){showToastMsg('🔒 محاضرة مقفلة — لا يمكن تحريكها');return;}}
   const g=getBundleGrid(bundleId);const src=g[sd][sp];const dest=g[di][pi];
   // إذا الخلية المستهدفة مشغولة بمقرر مختلف → تحذير
@@ -3374,8 +3421,10 @@ function renderBundleGrid(deptId,bundle,editable){
       const chipTitle=resolved.type?`نوع المحاضرة (${resolved.source==='banner'?'حسب ملف رايات':'مضبوط بالجدول'}): ${cellTypeLabel(resolved.type)} — انقر لاختيار الرقم`:'انقر لاختيار الرقم';
       return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${deptId}')" ${chipStyle} title="${chipTitle}">🔢 ${esc(s.crn)}${linkBadge}</span>`;
     }).join('');
-    const dragChip=`<span class="course-chip" draggable="true" ondragstart="dragCourseChip(event,this)" data-course="${esc(c.name)}" style="background:${color};color:#fff;cursor:grab" title="اسحب للجدول">⠇ اسحب</span>`;
-    const counter=`<span class="badge ${ok?'bg':'br'}">${scheduled}/${needed}</span>`;
+    const canManageCourse = canUserManageCourse(c.name, c.cat, bundle.deptId || deptId);
+    const dragChip = (editable && canManageCourse)
+      ? `<span class="course-chip" draggable="true" ondragstart="dragCourseChip(event,this)" data-course="${esc(c.name)}" style="background:${color};color:#fff;cursor:grab" title="اسحب للجدول">⠇ اسحب</span>`
+      : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;font-size:10px;padding:3px 6px" title="مقرر محمي يتبع لقسم آخر">🔒 محمي</span>`;    const counter=`<span class="badge ${ok?'bg':'br'}">${scheduled}/${needed}</span>`;
 
     // شارة فئة المقرر
     const catBadge=c.cat==='sup'
@@ -3437,8 +3486,16 @@ function renderBundleGrid(deptId,bundle,editable){
       const hasAnyConflict=conflicts.length>0;
       const cls='day-cell'+(cell?' filled':'')+(hasAnyConflict?' conflict':'')+(locked?' cell-locked':'')+(!editable||locked?' readonly':'');
       let attrs='';
-      if(editable&&!locked){
-        attrs=`onclick="openBundleCell('${deptId}','${bundleId}',${di},${pi})"`;
+     const cellCanManage = cell ? canUserManageCourse(cell.subj, cell.cellType, bundle.deptId || deptId) : true;
+      if(editable && !locked){
+        if (cell && !cellCanManage) {
+          attrs = `onclick="event.stopPropagation();showToastMsg('🔒 هذا المقرر (${esc(cell.subj)}) يدار من قسمه المختص ولا يمكن تعديله من هنا.');"`;
+        } else {
+          attrs = `onclick="openBundleCell('${deptId}','${bundleId}',${di},${pi})"`;
+          attrs += ` ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="dropBundleOrChip(event,'${deptId}','${bundleId}',${di},${pi})"`;
+          if(cell) attrs += ` draggable="true" ondragstart="dragBundleCell(event,${di},${pi})"`;
+        }
+      }
         attrs+=` ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="dropBundleOrChip(event,'${deptId}','${bundleId}',${di},${pi})"`;
         if(cell)attrs+=` draggable="true" ondragstart="dragBundleCell(event,${di},${pi})"`;
       }
@@ -8780,8 +8837,8 @@ function renderEnrollment(){
       <input type="file" accept=".csv,.xlsx" style="display:none" onchange="importEnrollmentFile(this)"/>
     </label>
   </div>
-  <p style="font-size:11.5px;color:var(--mu);margin-bottom:14px">💡 مصفوفة التسجيل المتوقع (الملف اللي ترفعه هنا) تقدر تجيبها جاهزة من موقع الزميلين م. محمد يوسف الشبيلي وأ. منصور عبدالعزيز الفايز:
-    <a href="https://myalsh2030.github.io/matrix/" target="_blank" rel="noopener" style="color:var(--ac);font-weight:700">myalsh2030.github.io/matrix</a></p>
+  <p style="font-size:11.5px;color:var(--mu);margin-bottom:14px">💡 مصفوفة التسجيل المتوقع (الملف اللي ترفعه هنا) يمكن استيرادها جاهزة من موقع الزميلين م. محمد يوسف الشبيلي وأ. منصور عبدالعزيز الفايز:
+    <a href="http://rmatrix.alfayez.cc" target="_blank" rel="noopener" style="color:var(--ac);font-weight:700">http://rmatrix.alfayez.cc</a></p>
 
   <!-- قبول جديد -->
   <div class="panel">
@@ -11123,7 +11180,6 @@ window.openAutoDistWizard = function(dId) {
         const isSup = (dId === 'sup');
         const isIt = (dId === 'it');
 
-    // الدراسات العامة فقط تبحث في كل الكلية، بينما الحاسب والأقسام الأخرى تبحث في قسمها فقط
         const departmentsToScan = isSup 
             ? getDepts().filter(d => d.id !== 'sup') 
             : [getDepts().find(d => d.id === dId)].filter(Boolean);
@@ -11142,62 +11198,62 @@ window.openAutoDistWizard = function(dId) {
             document.body.appendChild(modal);
         }
 
-        // دالة مساعدة للتعرف على مواد الدراسات العامة بالاسم الصريح كأمان إضافي
         function isSupCourseByName(name) {
             if (!name) return false;
             const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
             return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
         }
 
-        // فلترة ذكية للمقررات بناءً على نوع القسم
         function isCourseMyResponsibility(c, targetDeptId) {
-            if (isSup) {
-                return c.cat === 'sup' || isSupCourseByName(c.name);
-            }
-            if (isIt) {
-                return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp';
-            }
+            if (isSup) return c.cat === 'sup' || isSupCourseByName(c.name);
+            if (isIt) return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp';
             return c.cat === 'dept';
         }
         
-        // تجميع المقررات الفريدة التابعة لهذا القسم
+        // تجميع المقررات مع التمييز بالرمز (Code) لمنع دمج المقررات متطابقة الاسم
         const allCoursesMap = new Map();
         departmentsToScan.forEach(dept => {
             getSpecs(dept.id).forEach(sp => {
                 getPlan(dept.id, sp.id).forEach(c => {
                     if (isCourseMyResponsibility(c, dept.id)) {
-                        allCoursesMap.set(c.name, c);
+                        const uniqueKey = (c.code || c.name).trim();
+                        if (!allCoursesMap.has(uniqueKey)) {
+                            allCoursesMap.set(uniqueKey, c);
+                        }
                     }
                 });
             });
         });
         
-        const uniqueCourses = Array.from(allCoursesMap.values()).sort((a,b) => a.name.localeCompare(b.name,'ar'));
+        const uniqueCourses = Array.from(allCoursesMap.values()).sort((a,b) => (a.code||a.name).localeCompare(b.code||b.name, 'ar'));
 
         if(uniqueCourses.length === 0) {
              showToastMsg('⚠️ لا توجد مقررات مخصصة لقسمك في الخطط المعتمدة.');
              return;
         }
 
-        // 1. بناء واجهة المستويات
+        // 1. بناء واجهة المستويات (عرض الرموز بدلاً من الأسماء لمنع اللبس)
         let levelsHtml = `<div class="tw" style="margin-bottom:14px"><div class="ts"><table style="font-size:12px;width:100%">
-            <thead><tr><th>القسم / التخصص</th><th>المستوى</th><th>المقررات المستهدفة</th><th>عدد الرزم (الشعب)</th></tr></thead><tbody>`;
+            <thead><tr><th>القسم / التخصص</th><th>المستوى</th><th>المقررات المستهدفة (الرموز)</th><th>عدد الرزم (الشعب)</th></tr></thead><tbody>`;
         
         departmentsToScan.forEach(dept => {
             getSpecs(dept.id).forEach(sp => {
                 const plan = getPlan(dept.id, sp.id);
-                // إيجاد المستويات التي تحتوي على مقررات تهمنا
                 const levelsWithOurCourses = PLAN_LEVELS.filter(l => plan.some(c => c.level === l && isCourseMyResponsibility(c, dept.id)));
                 
                 levelsWithOurCourses.forEach(lvl => {
-                    const levelCoursesNames = plan.filter(c => c.level === lvl && isCourseMyResponsibility(c, dept.id)).map(c => c.name).join('، ');
+                    const levelCoursesCodes = plan
+                        .filter(c => c.level === lvl && isCourseMyResponsibility(c, dept.id))
+                        .map(c => `<span class="badge bb" style="font-family:monospace;font-size:11px;padding:3px 6px;margin:2px;display:inline-block" title="${esc(c.name)}">${esc(c.code || c.name)}</span>`)
+                        .join(' ');
+
                     const isCoopOrProject = lvl.includes('الخامس') || lvl.includes('السادس') || lvl.includes('السابع') || lvl.includes('الثامن');
                     const defVal = isCoopOrProject ? 1 : 2; 
                     
                     levelsHtml += `<tr style="border-bottom:1px solid var(--bd)">
                         <td style="font-weight:bold;color:var(--ac)">${(dept.id !== dId) ? `<span style="color:#0d9488">[${esc(dept.name)}]</span><br>` : ''}${esc(sp.name)}</td>
                         <td><span class="badge bb">${esc(lvl)}</span></td>
-                        <td style="color:var(--mu);font-size:10px;max-width:260px;white-space:normal">${esc(levelCoursesNames)}</td>
+                        <td style="max-width:300px;white-space:normal">${levelCoursesCodes}</td>
                         <td style="text-align:center"><input type="number" class="wiz-level-input" data-targetdept="${dept.id}" data-spec="${sp.id}" data-lvl="${esc(lvl)}" value="${defVal}" min="0" max="15" style="width:60px;text-align:center;padding:4px;border:1.5px solid var(--ac);border-radius:6px;outline:none"></td>
                     </tr>`;
                 });
@@ -11205,20 +11261,24 @@ window.openAutoDistWizard = function(dId) {
         });
         levelsHtml += `</tbody></table></div></div>`;
 
-        // 2. بناء واجهة المقررات والمدربين
+        // 2. بناء واجهة المقررات والمدربين مع إظهار الرمز والاسم معاً
         const insList = getInstructors(dId) || [];
         let coursesHtml = `<div style="max-height:300px;overflow-y:auto;border:1.5px solid var(--bd);border-radius:8px;padding:12px;background:#f8fafc">`;
         uniqueCourses.forEach(c => {
             const catBadge = (c.cat === 'sup' || isSupCourseByName(c.name)) ? `<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">دراسات عامة</span>` : 
                              c.cat === 'comp' ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">حاسب مشترك</span>` : 
                              `<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">تخصص</span>`;
+            
+            const uniqueKey = (c.code || c.name).trim();
 
             coursesHtml += `<div style="margin-bottom:12px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
-                <strong style="font-size:13px;color:#1e40af;display:block;margin-bottom:8px">📚 ${esc(c.name)} <span style="font-size:10px;color:#64748b">(${esc(c.code)})</span> ${catBadge}</strong>
+                <strong style="font-size:13px;color:#1e40af;display:block;margin-bottom:8px">
+                    📚 <span style="font-family:monospace;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:5px;font-weight:800;font-size:12px;margin-left:5px">${esc(c.code || '')}</span> ${esc(c.name)} ${catBadge}
+                </strong>
                 <div style="display:flex;flex-wrap:wrap;gap:8px">
                 ${insList.map(ins => {
-                    return `<label style="font-size:11px;display:flex;align-items:center;gap:4px;background:#fff;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;transition:.2s" onmouseover="this.style.borderColor='var(--ac)'" onmouseout="this.style.borderColor='#cbd5e1'">
-                        <input type="checkbox" class="wiz-course-ins" data-course="${esc(c.name)}" value="${ins.id}" style="cursor:pointer;width:14px;height:14px"> ${esc((ins.name||'').split(' ').slice(0,3).join(' '))}
+                    return `<label style="font-size:11px;display:flex;align-items:center;gap:4px;background:#fff;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;transition:.2s">
+                        <input type="checkbox" class="wiz-course-ins" data-course="${esc(uniqueKey)}" data-coursename="${esc(c.name)}" value="${ins.id}" style="cursor:pointer;width:14px;height:14px"> ${esc((ins.name||'').split(' ').slice(0,3).join(' '))}
                     </label>`;
                 }).join('')}
                 ${insList.length === 0 ? `<span style="color:#dc2626;font-size:10px">لا يوجد مدربون مسجلون في قسمك</span>` : ''}
@@ -11229,24 +11289,17 @@ window.openAutoDistWizard = function(dId) {
 
         modal.innerHTML = `<div class="modal" style="max-width:950px;direction:rtl">
             <div class="modal-head" style="background:linear-gradient(135deg, #4f46e5, #3730a3)">
-                <h2>🤖 المعالج الذكي للتوزيع التلقائي ${(isSup || isIt) ? '(مدعوم لجميع أقسام الكلية)' : ''}</h2>
+                <h2>🤖 المعالج الذكي للتوزيع التلقائي (بالرموز المعتمدة)</h2>
                 <button type="button" class="modal-close" onclick="document.getElementById('autoDistWizardModal').style.display='none'">✕</button>
             </div>
             <div class="modal-body">
-                <div style="background:#fffbeb;border:1px solid #fde047;border-radius:8px;padding:12px;font-size:12px;color:#854d0e;margin-bottom:16px;line-height:1.6">
-                    <b>كيف يعمل المعالج؟</b><br>
-                    1. يقوم بمسح جميع تخصصات الكلية وفلترة المقررات ليجلب <b>مقررات قسمك فقط</b>.<br>
-                    2. ينشئ رزم التخصصات ويوزع المقررات بدون أي تعارض زمني أو مكاني مع محاضرات الأقسام الأخرى.
-                </div>
-                
-                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم المطلوبة لكل قسم وتخصص</h3>
+                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم المطلوبة (المقررات بالرموز)</h3>
                 ${levelsHtml}
 
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:20px">
-                    <h3 style="font-size:14px;color:var(--tx);margin:0">2️⃣ تحديد المدربين لكل مقرر</h3>
+                    <h3 style="font-size:14px;color:var(--tx);margin:0">2️⃣ تحديد المدربين لكل مقرر (مفصولة بالرمز)</h3>
                     <button type="button" class="bpu" style="font-size:12px;padding:6px 12px;background:#8b5cf6" onclick="window.applyWizardSS07Mapping('${dId}')">🪄 استنتاج الروابط تلقائياً من تقرير SS07</button>
                 </div>
-                <p style="font-size:11px;color:var(--mu);margin-bottom:10px">حدد المدربين المسموح لهم بتدريس كل مقرر ليقوم النظام بموازنة النصاب تلقائياً.</p>
                 ${coursesHtml}
 
                 <div style="display:flex;gap:10px;margin-top:20px">
