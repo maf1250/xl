@@ -558,27 +558,109 @@ function formatCollegeName(raw) {
     return `الكلية التقنية ب${city}`;
   }
 }
-  function getKnownDeptId(arabicName) {
-  const n = arabicName || '';
-  if(n.includes('الحاسب')) return 'it';
-  if(n.includes('الالكترون') || n.includes('الإلكترون')) return 'elec';
-  if(n.includes('اتصالات')) return 'comm';
-  if(n.includes('سياحة') || n.includes('ضيافة')) return 'tour';
-  if(n.includes('كهربائ')) return 'pwr';
-  if(n.includes('كيميائ')) return 'chem';
-  if(n.includes('أزياء') || n.includes('ازياء')) return 'fash';
-  if(n.includes('اعمال') || n.includes('أعمال')) return 'biz';
-  if(n.includes('تزيين') || n.includes('تجميل')) return 'cosm';
-  if(n.includes('مدني') || n.includes('معماري')) return 'civil';
-  if(n.includes('خاصة')) return 'spec';
-  if(n.includes('ميكاني')) return 'mech';
-  if(n.includes('بيئة')) return 'env';
-  if(n.includes('مساحة')) return 'surv';
-  if(n.includes('إعلام') || n.includes('اعلام')) return 'media';
-  if(n.includes('غذاء')) return 'food';
-  if(n.includes('عمارة') || n.includes('تصميم')) return 'arch';
-  if(n.includes('دراسات') || n.includes('عامة')) return 'sup';
-  return 'd_' + Math.random().toString(36).substr(2, 4); // في حال وجود قسم غير معروف
+function getKnownDeptId(arabicName) {
+  const raw = (arabicName || '').trim();
+  if (!raw) return 'd_' + Math.random().toString(36).substr(2, 4);
+
+  // تطبيع النص لإزالة التشكيل وتوحيد الحروف
+  const n = raw
+    .replace(/[\u064B-\u0652\u0670]/g, '')
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/[يى]/g, 'ي')
+    .replace(/\s+/g, ' ');
+
+  // 1. التقنية الخاصة
+  if (n.includes('معوقين سمعيا') || n.includes('تقنية خاصة') || n.includes('صم') || n.includes('بصري')) return 'spec';
+
+  // 2. التقنية الميكانيكية
+  if (
+    n.includes('ميكانيك') || n.includes('محركات') || n.includes('مركبات') || 
+    n.includes('تصنيع') || n.includes('تبريد وتكييف') || n.includes('تبريد') || 
+    n.includes('تشكيل و تركيب الالمنيوم') || n.includes('تشغيل الات الانتاج') || 
+    n.includes('الات التحكم الرقمي') || n.includes('لحام') || n.includes('معدات ثقيلة') || 
+    n.includes('سمكرة') || n.includes('صفائح معدنية') || n.includes('نجارة') || 
+    n.includes('دهان وتلميع') || n.includes('ميكانيكا سيارات') || n.includes('هيدروليك') ||
+    n.includes('كهرباء والكترونيات المركبات') || n.includes('كهرباء والكترونيات الم')
+  ) return 'mech';
+
+  // 3. الحاسب وتقنية المعلومات
+  if (
+    n.includes('حاسب') || n.includes('شبكات') || n.includes('شبك') || 
+    n.includes('برمج') || n.includes('تطوير الويب') || n.includes('دعم فني') || 
+    n.includes('وسائط متعددة') || n.includes('سيبران') || n.includes('ادارة انظمة الشبكات')
+  ) return 'it';
+
+  // 4. التقنية الإلكترونية
+  if (
+    n.includes('الكترون') || n.includes('اجهزة طبية') || n.includes('نظارات') || 
+    n.includes('الات دقيقة') || n.includes('روبوت') || n.includes('ذكاء اصطناعي') || 
+    n.includes('ميكاترونيك') || n.includes('اجهزة ذكية')
+  ) return 'elec';
+
+  // 5. التقنية الكهربائية
+  if (
+    n.includes('كهرب') || n.includes('قوى') || n.includes('الات كهربائية') || 
+    n.includes('طاقة متجددة') || n.includes('مصاعد')
+  ) return 'pwr';
+
+  // 6. تقنية الاتصالات
+  if (n.includes('اتصالات')) return 'comm';
+
+  // 7. التقنية الكيميائية
+  if (n.includes('كيمي') || n.includes('انتاج كيميائي') || n.includes('مختبرات كيميائية')) return 'chem';
+
+  // 8. التقنية المدنية والمعمارية
+  if (
+    n.includes('مدني') || n.includes('معمار') || n.includes('انشاءات') || 
+    n.includes('مراقبة مدنية') || n.includes('رسم معماري') || n.includes('مراقبة معمارية') || 
+    n.includes('تمديدات صحية')
+  ) return 'civil';
+
+  // 9. تقنية المساحة
+  if (n.includes('مساحة')) return 'surv';
+
+  // 10. تقنية الاعمال
+  if (
+    n.includes('اعمال') || n.includes('محاسب') || n.includes('مكتب') || 
+    n.includes('مستودعات') || n.includes('تسويق') || n.includes('موارد بشرية') || 
+    n.includes('تجارة الكترونية') || n.includes('لوجست') || n.includes('تأمين') || 
+    n.includes('ادارة')
+  ) return 'biz';
+
+  // 11. تقنية الانتاج الإعلامي
+  if (
+    n.includes('اعلام') || n.includes('اوفست') || n.includes('طباعة الية') || 
+    n.includes('تصوير ضوئي') || n.includes('فوتوغراف') || n.includes('تجهيز طباعي') || 
+    n.includes('تجليد')
+  ) return 'media';
+
+  // 12. تقنية البيئة
+  if (n.includes('بيئة') || n.includes('سلامة وصحة مهنية')) return 'env';
+
+  // 13. تقنية التزيين والتجميل
+  if (n.includes('تزيين') || n.includes('تجميل') || n.includes('بشرة') || n.includes('شعر') || n.includes('حلاقة')) return 'cosm';
+
+  // 14. تقنية السياحة والضيافة
+  if (
+    n.includes('سياح') || n.includes('ضياف') || n.includes('فندق') || 
+    n.includes('سفر') || n.includes('طهي') || n.includes('طعام') || 
+    n.includes('حج وعمرة') || n.includes('فعاليات') || n.includes('ارشاد سياحي')
+  ) return 'tour';
+
+  // 15. تقنية العمارة والتصميم
+  if (n.includes('تصميم داخلي') || n.includes('عمارة وتصميم')) return 'arch';
+
+  // 16. تقنية الغذاء
+  if (n.includes('غذاء') || n.includes('تصنيع غذائي') || n.includes('سلامة الاغذية')) return 'food';
+
+  // 17. تقنية تصميم وتصنيع الأزياء
+  if (n.includes('ازياء') || n.includes('موضة') || n.includes('خياطة')) return 'fash';
+
+  // 18. الدراسات العامة
+  if (n.includes('دراسات') || n.includes('عامة') || n.includes('مساند')) return 'sup';
+
+  return 'd_' + Math.random().toString(36).substr(2, 4);
 }
 let currentCell=null, currentBundleCell=null;
 let currentSectionId=null, currentInstructorId=null, currentBundleId=null;
@@ -1934,8 +2016,8 @@ function saveBundleCellModal(){
   const insVal=insId==='__new__'?'':insId;
   const roomVal=roomId==='__newroom__'?'':roomId;
   const ctx=currentCell||currentBundleCell;
- // --- التحقق من صلاحيات التعديل لرئيس القسم ---
-  if (ctx && CU && CU.role === 'head' && !getAllowSupEdit()) {
+// --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
+  if (ctx && CU && CU.role === 'head') {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
       const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
@@ -1947,34 +2029,38 @@ function saveBundleCellModal(){
           existingSubj = existingCell ? existingCell.subj : '';
       }
 
+      const sets = buildSupItNameSets();
       const getCourseType = (sName) => {
           if(!sName) return 'dept';
           const cat = courseCategoryByName(ctx.deptId, sName);
-          const sets = buildSupItNameSets();
           if (cat === 'sup' || sets.supNames.has(sName)) return 'sup';
           if (cat === 'comp' || sets.itNames.has(sName)) return 'comp';
           return 'dept';
       };
 
-      const subjType = typeof subj !== 'undefined' ? getCourseType(subj) : 'dept';
+      const subjType = getCourseType(subj);
       const existingSubjType = getCourseType(existingSubj);
+      const hasIT = getDepts().some(d => d.id === 'it');
 
-     const hasIT = getDepts().some(d => d.id === 'it');
-      const canEditType = (type) => {
-          if (type === 'dept') return true;
-          if (type === 'sup' && CU.dept === 'sup') return true;
-          if (type === 'comp') {
-              if (CU.dept === 'it') return true;
-              // السماح لرئيس الدراسات إذا لم يوجد قسم حاسب أو إذا فعّل الأدمن الصلاحية الخاصة
-              if (CU.dept === 'sup' && (!hasIT || getAllowSupEditComp())) return true; 
-              return false;
+      // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
+      if (CU.dept === 'sup') {
+          if (subj && subjType !== 'sup' && !(subjType === 'comp' && getAllowSupEditComp())) {
+              showToastMsg('⛔ بصفتك رئيس قسم الدراسات العامة، يمكنك فقط إسناد مقررات الدراسات العامة.');
+              return;
           }
-          return false;
-      };
-
-      if (!canEditType(subjType) || !canEditType(existingSubjType)) {
-          showToastMsg('⛔ ليس لديك صلاحية لإضافة أو تعديل هذه المقررات المشتركة. تواصل مع مدير النظام.');
-          return;
+          if (existingSubj && existingSubjType !== 'sup' && !(existingSubjType === 'comp' && getAllowSupEditComp())) {
+              showToastMsg('⛔ لا يمكنك تعديل أو حذف مقرر تخصصي تابع لقسم آخر.');
+              return;
+          }
+      } 
+      // 2. إذا كان المستخدم رئيس قسم تخصصي
+      else {
+          if (!getAllowSupEdit()) {
+              if (subjType === 'sup' || existingSubjType === 'sup') {
+                  showToastMsg('⛔ مقررات الدراسات العامة تدار من قبل رئيس قسم الدراسات العامة.');
+                  return;
+              }
+          }
       }
   }
   // تدقيق: لو مدير النظام استخدم "التجاوز" واختار مدرباً من خارج قسم المقرر الأصلي، سجّل الحركة
@@ -2092,11 +2178,12 @@ function saveBundleCellModal(){
   }
   closeModal('cellModal');renderDeptTabContent(currentDept);
 }
-
 function clearBundleCellModal(){
- const ctx = currentCell || currentBundleCell;
-  // --- التحقق من صلاحيات الحذف لرئيس القسم ---
-  if (ctx && CU && CU.role === 'head' && !getAllowSupEdit()) {
+  const ctx = currentCell || currentBundleCell;
+  if (!ctx) return;
+
+  // --- التحقق من صلاحيات الحذف لرئيس القسم (حماية التدفق الثنائي) ---
+  if (CU && CU.role === 'head') {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
       const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
@@ -2108,10 +2195,10 @@ function clearBundleCellModal(){
           existingSubj = existingCell ? existingCell.subj : '';
       }
 
+      const sets = buildSupItNameSets();
       const getCourseType = (sName) => {
           if(!sName) return 'dept';
           const cat = courseCategoryByName(ctx.deptId, sName);
-          const sets = buildSupItNameSets();
           if (cat === 'sup' || sets.supNames.has(sName)) return 'sup';
           if (cat === 'comp' || sets.itNames.has(sName)) return 'comp';
           return 'dept';
@@ -2119,27 +2206,51 @@ function clearBundleCellModal(){
 
       const existingSubjType = getCourseType(existingSubj);
 
-     const hasIT = getDepts().some(d => d.id === 'it');
-      const canEditType = (type) => {
-          if (type === 'dept') return true;
-          if (type === 'sup' && CU.dept === 'sup') return true;
-          if (type === 'comp') {
-              if (CU.dept === 'it') return true;
-              // السماح لرئيس الدراسات إذا لم يوجد قسم حاسب أو إذا فعّل الأدمن الصلاحية الخاصة
-              if (CU.dept === 'sup' && (!hasIT || getAllowSupEditComp())) return true; 
-              return false;
+      // 1. رئيس قسم الدراسات العامة: ممنوع يحذف مادة تخصصية
+      if (CU.dept === 'sup') {
+          if (existingSubj && existingSubjType !== 'sup' && !(existingSubjType === 'comp' && getAllowSupEditComp())) {
+              showToastMsg('⛔ لا يمكنك حذف مقرر تخصصي تابع لقسم آخر.');
+              return;
           }
-          return false;
-      };
-
-      if (!canEditType(existingSubjType)) {
-          showToastMsg('⛔ ليس لديك صلاحية لحذف هذه المقررات المشتركة.');
-          return;
+      } 
+      // 2. رئيس القسم التخصصي: ممنوع يحذف مادة دراسات عامة إلا بصلاحية
+      else {
+          if (!getAllowSupEdit()) {
+              if (existingSubjType === 'sup') {
+                  showToastMsg('⛔ لا يمكنك حذف مقرر دراسات عامة، يُدار من قسم الدراسات العامة.');
+                  return;
+              }
+          }
       }
   }
-  if(currentCell){const {sectionId,di,pi}=currentCell;const g=getGrid(sectionId);const wasCell=g[di][pi];g[di][pi]=null;if(wasCell&&(wasCell.duration===3||wasCell.duration===4))clearExtendedCell(g,di,pi);saveGrid(sectionId,g);currentCell=null;}
-  else if(currentBundleCell){const {bundleId,di,pi}=currentBundleCell;const g=getBundleGrid(bundleId);const wasCell=g[di][pi];g[di][pi]=null;if(wasCell&&(wasCell.duration===3||wasCell.duration===4))clearExtendedCell(g,di,pi);saveBundleGrid(bundleId,g);currentBundleCell=null;}
-  closeModal('cellModal');renderDeptTabContent(currentDept);
+
+  // --- تنفيذ الحذف مع الحفاظ على الأجزاء المشتركة ---
+  const isB = !!ctx.bundleId;
+  const entityId = ctx.sectionId || ctx.bundleId;
+  const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
+  const wasCell = g[ctx.di] && g[ctx.di][ctx.pi];
+
+  if (ctx.subSlot === 'sub2') {
+      // مسح النصف الثاني فقط في حال وجوده
+      if (wasCell && wasCell.sub2) {
+          delete wasCell.sub2;
+      }
+  } else {
+      // مسح الخلية الأساسية
+      g[ctx.di][ctx.pi] = null;
+      if (wasCell && (wasCell.duration === 3 || wasCell.duration === 4)) {
+          clearExtendedCell(g, ctx.di, ctx.pi);
+      }
+  }
+
+  if (isB) saveBundleGrid(entityId, g);
+  else saveGrid(entityId, g);
+
+  currentCell = null;
+  currentBundleCell = null;
+  closeModal('cellModal');
+  renderDeptTabContent(currentDept);
+  showToastMsg('🗑️ تم مسح المحاضرة بنجاح');
 }
 
 // ══ DRAG AND DROP ══
@@ -2399,22 +2510,12 @@ function gridTabHTML(deptId){
           return false;
       };
 
-      const crossBundles = [];
+     const crossBundles = [];
       getDepts().forEach(d => {
           if (d.id === deptId) return;
           getBundles(d.id).forEach(b => {
-              const g = getBundleGrid(b.id);
-              // فحص الخلية الأساسية أو النصف الثاني
-              const hasCourse = g.some(day => day.some(cell => 
-                  (cell && isMyCourse(cell.subj)) || 
-                  (cell && cell.sub2 && isMyCourse(cell.sub2.subj))
-              ));
-
-              if (hasCourse) {
-                  // تنظيف اسم القسم ليظهر بشكل لائق (مثال: الأعمال، الميكانيكية)
-                  const cleanDeptName = d.name.replace('تقنية ', '').replace('التقنية ', '');
-                  crossBundles.push({ ...b, name: `${b.name} (${cleanDeptName})` });
-              }
+              const cleanDeptName = d.name.replace('تقنية ', '').replace('التقنية ', '');
+              crossBundles.push({ ...b, name: `${b.name} (${cleanDeptName})`, actualDeptId: d.id });
           });
       });
 
@@ -3112,13 +3213,27 @@ function addBundle(deptId){
   showToastMsg(`✅ تمت إضافة رزمة "${name}" وانعكست في قسمها التخصصي بنجاح`);
 }
 
-function deleteBundle(deptId,id){
-  if(!confirm('حذف هذه الرزمة وجدولها؟'))return;
-  const bundles=getBundles(deptId).filter(b=>b.id!==id);
-  saveBundles(deptId,bundles);
-  try{localStorage.removeItem('pq_bgrid_'+id);}catch(e){}
-  if(currentBundleId===id)currentBundleId=bundles.length?bundles[0].id:null;
+function deleteBundle(deptId, id) {
+  let targetDeptId = deptId;
+  for (const d of getDepts()) {
+    if (getBundles(d.id).some(b => b.id === id)) {
+      targetDeptId = d.id;
+      break;
+    }
+  }
+
+  if (CU && CU.role === 'head' && CU.dept === 'sup' && targetDeptId !== 'sup') {
+    showToastMsg('⛔ لا يمكن لرئيس الدراسات العامة حذف شعبة تابعة لقسم تخصصي.');
+    return;
+  }
+
+  if (!confirm('حذف هذه الرزمة وجدولها نهائياً؟')) return;
+  const bundles = getBundles(targetDeptId).filter(b => b.id !== id);
+  saveBundles(targetDeptId, bundles);
+  try { localStorage.removeItem('pq_bgrid_' + id); } catch (e) {}
+  if (currentBundleId === id) currentBundleId = null;
   renderDeptTabContent(deptId);
+  showToastMsg('✅ تم حذف الرزمة بنجاح');
 }
 
 // ── تعارض المدرب (شعب + رزم) ──
@@ -11176,30 +11291,45 @@ window.executeAutoDistribution = function(dId) {
                         }
                     }));
 
-                    courses.forEach(c => {
+                   courses.forEach(c => {
                         const sessionsNeeded = c.sessions || 2;
                         const cHours = chByName[c.name] || 2;
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         const allowedInsIds = courseInsMap[c.name] || [];
                         
+                        let assignedIns = null; // لتثبيت نفس المدرب لكلا اللقائين
+                        const usedDaysForCourse = new Set(); // ⛔ لتتبع الأيام ومنع التكرار في نفس اليوم
+
                         for (let sess = 0; sess < sessionsNeeded; sess++) {
                             const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                             let placed = false;
                             
-                            const shuffledDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
+                            // استبعاد الأيام التي تم وضع هذا المقرر فيها مسبقاً لنفس الرزمة
+                            let candidateDays = [...Array(DAYS.length).keys()]
+                                .filter(d => !usedDaysForCourse.has(d))
+                                .sort(() => Math.random() - 0.5);
+
+                            // ملاذ أخير فقط إن كانت كل أيام الأسبوع محجوزة بالكامل
+                            if (candidateDays.length === 0) {
+                                candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
+                            }
+
                             const shuffledPeriods = [...Array(P.length).keys()].sort(() => Math.random() - 0.5);
 
                             outerLoop:
-                            for (let di of shuffledDays) {
+                            for (let di of candidateDays) {
                                 for (let pi of shuffledPeriods) {
                                     const timeKey = `${di}_${pi}`;
                                     
-                                    // 🛡️ إذا كانت الخلية محجوزة لمقرر دراسات عامة أو تخصص سابق، لا يلمسها أبداً!
+                                    // 🛡️ إذا كانت الخلية محجوزة لمقرر دراسات عامة أو تخصص سابق
                                     if (bGrid[di][pi]) continue;
 
                                     let chosenIns = null;
-                                    const shuffledIns = [...allowedInsIds].sort(()=> Math.random() - 0.5);
+                                    // نفضل نفس المدرب الذي أخذ اللقاء الأول لنفس المادة
+                                    const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
+                                    const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
+
                                     for (let insId of shuffledIns) {
                                         if (!busyIns[insId] || !busyIns[insId].has(timeKey)) {
                                             chosenIns = insId;
@@ -11208,7 +11338,7 @@ window.executeAutoDistribution = function(dId) {
                                     }
 
                                     let chosenRoom = null;
-                                    const shuffledRooms = [...rooms].sort(()=> Math.random() - 0.5);
+                                    const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
                                     for (let rm of shuffledRooms) {
                                         if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
                                             chosenRoom = rm.id;
@@ -11230,12 +11360,14 @@ window.executeAutoDistribution = function(dId) {
                                         if (chosenIns) {
                                             if (!busyIns[chosenIns]) busyIns[chosenIns] = new Set();
                                             busyIns[chosenIns].add(timeKey);
+                                            assignedIns = chosenIns; // حفظ المدرب لإسناده في اللقاء التالي
                                         }
                                         if (chosenRoom) {
                                             if (!busyRoom[chosenRoom]) busyRoom[chosenRoom] = new Set();
                                             busyRoom[chosenRoom].add(timeKey);
                                         }
 
+                                        usedDaysForCourse.add(di); // 🔒 تسجيل اليوم لمنع وضع اللقاء الثاني في نفس اليوم
                                         placed = true;
                                         totalPlaced++;
                                         break outerLoop;
@@ -11480,8 +11612,7 @@ function processGlobalSC04(text) {
 
     const bySpec = {};
     data.forEach(r => {
-        const sp = (r[4] || '').trim(); 
-        if (!sp) return;
+        const sp = (r[4] || '').trim(); if (!sp) return;
         const code = (r[11] || '').trim();
         const name = (r[12] || '').trim();
         if (!name || code.startsWith('أو >>')) return;
@@ -11500,11 +11631,7 @@ function processGlobalSC04(text) {
         else if (COMP_SHARED_EXACT.some(c => code.includes(c))) cat = 'comp';
         
         if (!bySpec[sp]) bySpec[sp] = [];
-        bySpec[sp].push({ 
-            code, name, level, credit, ch, sessions, 
-            lecture: mh, practical: am, training: tm, cat, 
-            prereq: (r[13] || '').trim(), equiv: (r[14] || '').trim() 
-        });
+        bySpec[sp].push({ code, name, level, credit, ch, sessions, lecture: mh, practical: am, training: tm, cat, prereq: (r[13] || '').trim(), equiv: (r[14] || '').trim() });
     });
 
     let depts = getDepts();
@@ -11520,48 +11647,41 @@ function processGlobalSC04(text) {
             }
         }
 
-        // 2. البحث ثانياً: هل اسم التخصص يشابه اسم قسم قائم؟
+        // 2. البحث ثانياً: التخمين الدقيق عبر القاموس الشامل وربطه بالقسم المنشأ مسبقاً من SS01
         if (!matchedDeptId) {
-            for (let d of depts) {
-                const normD = d.name.replace(/التقنية|تقنية/g, '').trim();
-                const normS = spName.replace(/التقنية|تقنية/g, '').trim();
-                if (normS.includes(normD) || normD.includes(normS)) {
-                    matchedDeptId = d.id;
-                    break;
-                }
+            let targetDeptCode = getKnownDeptId(spName);
+            
+            // مطابقة بالرمز أو باسم القسم
+            let dept = depts.find(d => d.id === targetDeptCode || getKnownDeptId(d.name) === targetDeptCode);
+            
+            // معالجة الحالات المشتركة بين الأقسام
+            if (!dept && targetDeptCode === 'surv') {
+                // المساحة إذا لم يكن لها قسم مستقل ترتبط بالمدنية والمعمارية
+                dept = depts.find(d => d.id === 'civil' || getKnownDeptId(d.name) === 'civil');
             }
-        }
+            if (!dept && targetDeptCode === 'food') {
+                // سلامة الأغذية إذا لم يكن هناك قسم غذاء ترتبط بالبيئة
+                dept = depts.find(d => d.id === 'env' || getKnownDeptId(d.name) === 'env');
+            }
 
-        // 3. التخمين عبر الكود البرمجي getKnownDeptId
-        if (!matchedDeptId) {
-            let baseId = getKnownDeptId(spName);
-            let dept = depts.find(d => d.id === baseId);
             if (dept) {
                 matchedDeptId = dept.id;
-            } else {
-                // إذا لم يُعثر على القسم، يتم ربطه بأول قسم حاسوبي أو إنشاؤه
-                matchedDeptId = baseId;
-                let counter = 1;
-                while (depts.find(d => d.id === matchedDeptId)) { 
-                    matchedDeptId = baseId + counter; 
-                    counter++; 
-                }
-                depts.push({ id: matchedDeptId, name: spName }); 
-                saveDepts(depts);
+            } else if (depts.length > 0) {
+                // إذا لم يوجد هذا القسم في الكلية إطلاقاً، يربطه بأول قسم متاح ولا يفتح قسماً جديداً
+                matchedDeptId = depts[0].id;
             }
         }
 
-        // حفظ التخصص في القسم الصحيح
-        let specs = getSpecs(matchedDeptId);
-        let spObj = specs.find(s => s.name === spName);
-        if (!spObj) {
-            spObj = { id: genId(), name: spName };
-            specs.push(spObj);
-            saveSpecs(matchedDeptId, specs);
+        if (matchedDeptId) {
+            let specs = getSpecs(matchedDeptId);
+            let spObj = specs.find(s => s.name === spName);
+            if (!spObj) {
+                spObj = { id: genId(), name: spName };
+                specs.push(spObj);
+                saveSpecs(matchedDeptId, specs);
+            }
+            savePlan(matchedDeptId, spObj.id, bySpec[spName]);
         }
-        
-        // حفظ مواد الخطة للتخصص
-        savePlan(matchedDeptId, spObj.id, bySpec[spName]);
     });
 }
 
