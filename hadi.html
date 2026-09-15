@@ -2314,7 +2314,10 @@ function dragCourseChip(e,el){chipDragSubj=el.getAttribute('data-course');bundle
 function dropBundleOrChip(e,dId,bundleId,di,pi){
   e.preventDefault();e.currentTarget.classList.remove('dragover');
   {const _bg=getBundleGrid(bundleId);const _destB=_bg[di]&&_bg[di][pi];if(_destB&&_destB.locked){showToastMsg('🔒 المحاضرة مقفلة');chipDragSubj=null;bundleDragSrc=null;return;}}
-  if(!canUserManageCourse(subj, null, dId)){
+  if(chipDragSubj){
+    const subj=chipDragSubj;
+    chipDragSubj=null;
+    if(!canUserManageCourse(subj, null, dId)){
       showToastMsg('⛔ خرق صلاحية: ليس لديك صلاحية لإسناد أو سحب هذا المقرر.');
       return;
     }
@@ -3487,7 +3490,7 @@ function renderBundleGrid(deptId,bundle,editable){
       const cls='day-cell'+(cell?' filled':'')+(hasAnyConflict?' conflict':'')+(locked?' cell-locked':'')+(!editable||locked?' readonly':'');
       let attrs='';
      const cellCanManage = cell ? canUserManageCourse(cell.subj, cell.cellType, bundle.deptId || deptId) : true;
-      if(editable && !locked){
+     if(editable && !locked){
         if (cell && !cellCanManage) {
           attrs = `onclick="event.stopPropagation();showToastMsg('🔒 هذا المقرر (${esc(cell.subj)}) يدار من قسمه المختص ولا يمكن تعديله من هنا.');"`;
         } else {
@@ -3495,9 +3498,6 @@ function renderBundleGrid(deptId,bundle,editable){
           attrs += ` ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="dropBundleOrChip(event,'${deptId}','${bundleId}',${di},${pi})"`;
           if(cell) attrs += ` draggable="true" ondragstart="dragBundleCell(event,${di},${pi})"`;
         }
-      }
-        attrs+=` ondragover="event.preventDefault();this.classList.add('dragover')" ondragleave="this.classList.remove('dragover')" ondrop="dropBundleOrChip(event,'${deptId}','${bundleId}',${di},${pi})"`;
-        if(cell)attrs+=` draggable="true" ondragstart="dragBundleCell(event,${di},${pi})"`;
       }
       let content='<span class="cell-empty">—</span>';
       if(cell){
