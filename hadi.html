@@ -12266,8 +12266,7 @@ window.executeAutoDistribution = function(dId) {
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
-
-            // بناء بنك الأرقام المرجعية معتمداً على الرمز حصراً
+// بناء بنك الأرقام المرجعية بدقة متناهية معتمدًا على الرمز الموجود في الشعبة (SS01)
             const crnBank = {}; 
             
             const sectionsToScan = [
@@ -12278,30 +12277,40 @@ window.executeAutoDistribution = function(dId) {
             sectionsToScan.forEach(s => {
                 if (s.crn) {
                     const crnClean = String(s.crn).trim();
-                    let codeKey = s.code ? normCode(s.code) : '';
-                    
+                    let codeKey = '';
+
+                    // 1. الأولوية المطلقة للرمز المخزّن صراحةً في الشعبة (s.code القادم من SS01)
+                    if (s.code) {
+                        codeKey = normCode(s.code);
+                    }
+
+                    // 2. إذا لم يكن مخزناً، نستخرجه من اسم الشعبة (لو كان مدمجاً مثل اسلك-201)
                     if (!codeKey && s.name) {
                         const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                         if (m) codeKey = normCode(m[1]);
                     }
 
+                    // 3. إذا لم يوجد، نبحث في خطة التخصص عن المقرر الذي يطابق اسم الشعبة حصراً
                     if (!codeKey && s.name) {
                         const nKey = normName(s.name);
-                        if (courseNameToCodeList[nKey] && courseNameToCodeList[nKey].length > 0) {
-                            codeKey = courseNameToCodeList[nKey][0];
-                            s.code = codeKey; // حفظ الرمز في الشعبة
-                        }
+                        configs.forEach(confItem => {
+                            const plan = getPlan(targetDeptId, confItem.specId);
+                            const matchedPlanCourse = plan.find(c => normName(c.name) === nKey);
+                            if (matchedPlanCourse && matchedPlanCourse.code) {
+                                codeKey = normCode(matchedPlanCourse.code);
+                            }
+                        });
                     }
 
                     if (codeKey) {
                         if (!crnBank[codeKey]) crnBank[codeKey] = [];
+                        // منع تكرار نفس الرقم المرجعي لنفس الرمز
                         if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
                             crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey });
                         }
                     }
                 }
             });
-
             configs.forEach(conf => {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
                 if(!sp) return;
