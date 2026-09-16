@@ -3351,28 +3351,52 @@ function updateNewSecLevels(deptId){
 }
 
 // ══ قوائم موحّدة للطباعة/التنزيل بتبويب جدول الشعب — هذه الشعبة أو كل الشعب ══
-function printSectionsMenu(deptId){
-  if(confirm('طباعة جميع الشعب (كل المستويات)؟\n\nاضغط "موافق" للكل، أو "إلغاء" للشعبة الحالية فقط.')){
-    printAllSections(deptId);
-  }else if(currentBundleId){
-    printBundle(deptId,currentBundleId);
-  }else{
-    showToastMsg('⚠️ اختر شعبة أولاً');
-  }
-}
-function downloadSectionsMenu(deptId){
-  const choice=prompt('اختر ما تريد تنزيله (Excel):\n\n1) جدول كامل لكل الشعب (شيت منفصل لكل مستوى)\n2) هذه الشعبة فقط (قالب تسجيل رسمي)\n3) جدول الإسناد (كل الأقسام)\n4) جدول إسناد رزمة المستجدين (المستوى الأول فقط — شيت لكل شعبة)\n\nأدخل رقم الخيار:','1');
-  if(choice===null)return;
-  const c=choice.trim();
-  if(c==='1')downloadFullScheduleByLevel(deptId);
-  else if(c==='2'){
-    if(currentBundleId)exportBundleEnrollTemplate(deptId,currentBundleId);
-    else showToastMsg('⚠️ اختر شعبة أولاً');
-  }
-  else if(c==='3')exportDeptAssignmentExcelMenu(deptId);
-  else if(c==='4')exportLevel1AssignmentReport(deptId);
-  else showToastMsg('⚠️ اختيار غير صحيح — أدخل رقمًا من 1 إلى 4');
-}
+window.printSectionsMenu = function(deptId) {
+    let modal = document.getElementById('printMenuModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'printMenuModal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px;direction:rtl">
+        <div class="modal-head" style="background:linear-gradient(135deg, #7c3aed, #5b21b6)">
+          <h2>🖨️ خيارات الطباعة</h2>
+          <button class="modal-close" onclick="closeModal('printMenuModal')">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding:20px">
+          <button class="bpri" style="padding:14px;font-size:14px;background:#8b5cf6" onclick="closeModal('printMenuModal'); if(typeof currentBundleId !== 'undefined' && currentBundleId) printBundle('${deptId}', currentBundleId); else showToastMsg('⚠️ اختر شعبة أولاً');">📄 طباعة هذه الشعبة فقط</button>
+          <button class="bpri" style="padding:14px;font-size:14px;background:#4c1d95" onclick="closeModal('printMenuModal'); printAllSections('${deptId}')">📑 طباعة جميع شعب القسم (دفعة واحدة)</button>
+        </div>
+      </div>
+    `;
+    openModal('printMenuModal');
+};
+window.downloadSectionsMenu = function(deptId) {
+    let modal = document.getElementById('downloadMenuModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'downloadMenuModal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div class="modal" style="max-width:450px;direction:rtl">
+        <div class="modal-head" style="background:linear-gradient(135deg, #0284c7, #0369a1)">
+          <h2>📥 خيارات التنزيل (Excel)</h2>
+          <button class="modal-close" onclick="closeModal('downloadMenuModal')">✕</button>
+        </div>
+        <div class="modal-body" style="display:flex;flex-direction:column;gap:12px;padding:20px">
+          <button class="bpri" style="padding:14px;font-size:13px;background:#0ea5e9;text-align:right" onclick="closeModal('downloadMenuModal'); downloadFullScheduleByLevel('${deptId}')">📊 1. جدول كامل لكل الشعب (شيت منفصل لكل مستوى)</button>
+          <button class="bpri" style="padding:14px;font-size:13px;background:#0284c7;text-align:right" onclick="closeModal('downloadMenuModal'); if(typeof currentBundleId !== 'undefined' && currentBundleId) exportBundleEnrollTemplate('${deptId}', currentBundleId); else showToastMsg('⚠️ اختر شعبة أولاً');">📄 2. قالب تسجيل لهذه الشعبة فقط</button>
+          <button class="bpri" style="padding:14px;font-size:13px;background:#0369a1;text-align:right" onclick="closeModal('downloadMenuModal'); exportDeptAssignmentExcel('${deptId}', true)">👨‍🏫 3. جدول الإسناد (كل الأقسام)</button>
+          <button class="bpri" style="padding:14px;font-size:13px;background:#1e40af;text-align:right" onclick="closeModal('downloadMenuModal'); exportLevel1AssignmentReport('${deptId}')">🆕 4. جدول إسناد رزمة المستجدين (المستوى الأول)</button>
+        </div>
+      </div>
+    `;
+    openModal('downloadMenuModal');
+};
 // يصدّر جدول كامل بكل شعب القسم (كل التخصصات) في ملف واحد — شيت منفصل لكل مستوى، بكل معلومات المحاضرة
 // ══ جدول إسناد رزمة المستجدين — المستوى الأول فقط، شيت منفصل لكل شعبة/رزمة، بدون تكرار، مع الشعار ══
 async function exportLevel1AssignmentReport(deptId){
@@ -3559,8 +3583,7 @@ function deleteBundle(deptId, id) {
 }
 
 // ── تعارض المدرب (شعب + رزم) ──
-
-function renderBundleGrid(deptId,bundle,editable){
+window.renderBundleGrid = function(deptId,bundle,editable){
   const {id:bundleId,specId,level,name}=bundle;
   const courses=bundleLevelCourses(deptId,specId,level);
   const insList=getInstructors(deptId);
@@ -3569,8 +3592,6 @@ function renderBundleGrid(deptId,bundle,editable){
   const grid=getBundleGrid(bundleId);
   const specName=(getSpecs(deptId).find(s=>s.id===specId)||{}).name||'';
 
-  // ─── جدول المقررات مع الأرقام المرجعية ───
-  // تجميع المقررات المرتبطة (نفس المقرر نظري + عملي)
   const linkedGroups={};
   courses.forEach(c=>{
     const baseName=c.name.replace(/\s*\(نظري\)|\s*\(عملي\)|\s*نظري|\s*عملي/g,'').trim();
@@ -3603,19 +3624,16 @@ function renderBundleGrid(deptId,bundle,editable){
       ? `<span class="course-chip" draggable="true" ondragstart="dragCourseChip(event,this)" data-course="${esc(c.name)}" style="background:${color};color:#fff;cursor:grab" title="اسحب للجدول">⠇ اسحب</span>`
       : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;font-size:10px;padding:3px 6px" title="مقرر محمي يتبع لقسم آخر">🔒 محمي</span>`;    const counter=`<span class="badge ${ok?'bg':'br'}">${scheduled}/${needed}</span>`;
 
-    // شارة فئة المقرر
     const catBadge=c.cat==='sup'
       ?`<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">📚 دراسات عامة</span>`
       :c.cat==='comp'
       ?`<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">💻 حاسب</span>`:'';
 
-    // تفاصيل النظري والعملي
     let am=parseInt(c.am)||parseInt(c.practical)||0;
     if(getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) am = 0;
     const theoryHrs=(parseInt(c.mh)||parseInt(c.lecture)||0)+(parseInt(c.tm)||parseInt(c.training)||0);
     const capT=c.capTheory||40;
     const capP=c.capPract||20;
-    // إذا العملي سعته 20 والنظري 40 → دائماً يحتاج ضعف الشعب العملية
     const needsMultiSec=am>0&&capP<capT;
 
     const detailHtml=`<div style="font-size:9px;margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
@@ -3624,13 +3642,13 @@ function renderBundleGrid(deptId,bundle,editable){
       ${needsMultiSec?`<span style="background:#fef9c3;color:#854d0e;padding:1px 5px;border-radius:4px;font-weight:700">⚡ لكل شعبة نظرية → ${Math.ceil(capT/capP)} شعبة عملية (ن:${capT}، ع:${capP})</span>`:''}
     </div>`;
 
-const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>`:'';
-    
-    // 🛡️ إصلاح عرض ساعات الفيزياء
+    const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>`:'';
+
     let displayHours = c.ch || c.total || '—';
     if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) {
-          displayHours = '2'; 
-         }
+        displayHours = '2'; 
+    }
+
     const rowStyle=c.cat==='sup'?'background:#fffbeb':c.cat==='comp'?'background:#f5f3ff':'';
     return `<tr class="legend-row" style="${rowStyle}">
       <td><span style="display:inline-block;width:12px;height:12px;background:${color};border-radius:3px;vertical-align:middle"></span></td>
@@ -3651,7 +3669,7 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
       <span style="color:${cellTypeColor('remote')};font-weight:700">🔢 عن بُعد</span>
       <span style="color:${cellTypeColor('blended')};font-weight:700">🔢 مدمج</span>
       <span style="color:${cellTypeColor('selfstudy')};font-weight:700">🔢 ذاتي</span>
-      <span style="color:#6b7280">🔢 غير معروف النوع (لم يُحدَّد "نوع هذه المحاضرة" لأي خلية بهذا الرقم بعد)</span>
+      <span style="color:#6b7280">🔢 غير معروف النوع</span>
     </div>
     <table class="legend-table"><thead><tr>
     <th></th><th>المقرر</th><th>اللقاءات المطلوبة</th><th>الأرقام المرجعية</th><th>المجدول</th><th></th>
@@ -3699,7 +3717,6 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
           </div>`;
           if(editable)attrs+=` onclick="event.stopPropagation();openHalfSubCell('${deptId}','${bundleId}',${di},${pi})"`;
         } else if(cell.halfOnly){
-          // محاضرة مقسومة لنصفين بشكل احترافي: يمين = النصف الأول (واضح وقابل للنقر)، يسار = النصف الثاني
           const insName1=cell.insId?(resolveInstructorName(deptId,cell.insId)):'';
           const roomName1=cell.roomId?resolveRoomName(deptId,cell.roomId):'';
           const sub2=cell.sub2;
@@ -3727,12 +3744,11 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
         const insName=cell.insId?(resolveInstructorName(deptId,cell.insId)):'';
         const roomName=cell.roomId?resolveRoomName(deptId,cell.roomId):'';
         const conflictFlags=conflicts.map(c=>`<div class="cell-conflict-flag" title="${esc(c.msg)}">⚠ ${c.type==='ins'?'مدرّب':c.type==='room'?'قاعة':c.type==='crn'?'رقم مرجعي':'تكرار مقرر'}</div>`).join('');
-        const extDivider='';
         const halfBtn=editable?`<div class="cell-half-toggle" onclick="event.stopPropagation();toggleHalfPeriod('${deptId}','${bundleId}',${di},${pi})" title="إغلاق نصف المحاضرة" style="position:absolute;top:2px;left:2px;font-size:9px;cursor:pointer;opacity:.6;background:#e2e8f0;border-radius:3px;padding:1px 3px">½</div>`:'';
         const durBadge=cell.duration&&cell.duration!==2?`<div style="font-size:8px;font-weight:700;color:#1e40af;background:#dbeafe;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px">⏱️ ${cell.duration}سا</div>`:'';
         const typeBadge=cell.cellType==='theory'?`<div style="font-size:8px;font-weight:700;color:#1d4ed8;background:#dbeafe;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px;margin-right:2px">📘 نظري</div>`:cell.cellType==='practical'?`<div style="font-size:8px;font-weight:700;color:#dc2626;background:#fee2e2;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px;margin-right:2px">🔧 عملي</div>`:cell.cellType==='blended'?`<div style="font-size:8px;font-weight:700;color:#6d28d9;background:#ede9fe;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px;margin-right:2px">🔀 مدمج</div>`:cell.cellType==='selfstudy'?`<div style="font-size:8px;font-weight:700;color:#78350f;background:#fef3c7;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px;margin-right:2px">📖 ذاتي</div>`:cell.cellType==='remote'?`<div style="font-size:8px;font-weight:700;color:#2563eb;background:#dbeafe;border-radius:3px;padding:0 4px;display:inline-block;margin-top:1px;margin-right:2px">💻 عن بُعد</div>`:'';
         const linkedCrnCell=cell.crn?getLinkedCrn(deptId,cell.crn):null;
-        content=`<div style="position:relative">${extDivider}${halfBtn}<div class="cell-subj" style="border-right:3px solid ${color};padding-right:4px">${esc(cell.subj)}</div>${cell.crn?`<div style="font-size:9px;color:${cellTypeColor(cell.cellType)};font-weight:700;margin-top:1px">🔢 ${esc(cell.crn)}${linkedCrnCell?` <span style="color:#7c3aed">🔗${esc(linkedCrnCell)}</span>`:''}</div>`:''}${insName?`<div class="cell-ins">👤 ${esc(insName)}</div>`:''}${roomName?`<div class="cell-room">🚪 ${esc(roomName)}</div>`:''}<div>${typeBadge}${durBadge}</div>${conflictFlags}</div>`;
+        content=`<div style="position:relative">${halfBtn}<div class="cell-subj" style="border-right:3px solid ${color};padding-right:4px">${esc(cell.subj)}</div>${cell.crn?`<div style="font-size:9px;color:${cellTypeColor(cell.cellType)};font-weight:700;margin-top:1px">🔢 ${esc(cell.crn)}${linkedCrnCell?` <span style="color:#7c3aed">🔗${esc(linkedCrnCell)}</span>`:''}</div>`:''}${insName?`<div class="cell-ins">👤 ${esc(insName)}</div>`:''}${roomName?`<div class="cell-room">🚪 ${esc(roomName)}</div>`:''}<div>${typeBadge}${durBadge}</div>${conflictFlags}</div>`;
         }
       }else if(locked){
         content=`<div class="lock-badge">🔒</div>`;
@@ -3745,9 +3761,6 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
   });
 
   const headerCells=P.map((p,pi)=>`<th>م${p.n}<br/><span onclick="openEditPeriod(${pi})" title="انقر لتعديل الوقت" style="cursor:pointer;border-bottom:1px dashed rgba(255,255,255,.5)">${esc(p.t)}</span></th>`).join('');
-  // ── تذكير أسفل الجدول: المقررات اللي جُدول لها لقاء (أو أكثر) وينقصها لقاء واحد أخير فقط —
-  // غالباً اللقاء الثاني. المقررات اللي ما جُدول لها ولا لقاء لا تظهر هنا (موجودة أصلاً بجدول
-  // المقررات أعلى الجدول)، حتى يبقى التذكير قصيراً ومركّزاً على الناقص الأخير فقط.
   const ORD=['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن'];
   const missingLast=courses.map((c,i)=>{
     const needed=sessionsNeeded(c);
@@ -3762,15 +3775,15 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
       <span style="background:#fef3c7;color:#92400e;border-radius:4px;padding:0 5px;font-weight:700">ينقصه اللقاء ${ORD[x.scheduled+1]||x.scheduled+1} من ${x.needed}</span>
     </span>`).join('')}</div>
   </div>`:'';
-  // ملخص اللقاءات الكلي
   const totalNeeded=courses.reduce((s,c)=>s+sessionsNeeded(c),0);
   const totalScheduled=courses.reduce((s,c)=>s+sessionsScheduled(bundleId,c.name),0);
   const allOk=totalScheduled>=totalNeeded;
   const summaryBadge=`<span class="badge ${allOk?'bg':'br'}" style="font-size:12px">${totalScheduled}/${totalNeeded} لقاء مجدول</span>`;
-  // رقم مرجعي للرزمة (مخزن في bundle.crn)
   const bundleObj=getBundles(deptId).find(b=>b.id===bundleId)||{};
   const crnDisplay=bundleObj.crn?`<span class="badge bp">🔢 ${esc(bundleObj.crn)}</span>`:`<span class="badge br" style="cursor:pointer" onclick="editBundleCrn('${deptId}','${bundleId}')" title="مثال توضيحي على الصيغة: 1790404AA">🔢 أضف رقماً مرجعياً لـ${esc(bundleObj.name||'الرزمة')} (مثال: 1790404AA)</span>`;
   const studentsDisplay=bundleObj.students?`<span class="badge bg" style="cursor:pointer" onclick="editBundleStudents('${deptId}','${bundleId}')">👥 ${esc(bundleObj.students)} متدرب</span>`:`<span class="badge br" style="cursor:pointer" onclick="editBundleStudents('${deptId}','${bundleId}')">👥 أضف عدد المتدربين</span>`;
+  
+  // 🔥 التعديل: إزالة الأزرار الزائدة من الترويسة والاكتفاء بمسح المدربين إن كان موجوداً
   return `
   <div class="panel">
     <h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -3779,10 +3792,7 @@ const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;b
         ${summaryBadge}
         ${crnDisplay}
         ${studentsDisplay}
-        ${editable?`<button class="bdng" style="font-size:11px;padding:5px 10px" onclick="clearBundleInstructor('${deptId}','${bundleId}')">👤 مسح المدربين</button>
-        <button class="bpu" style="font-size:11px;padding:5px 10px" onclick="autoFillBundle('${deptId}','${bundleId}')">🤖 توزيع تلقائي</button>`:''}
-        <button class="bgr" style="font-size:11px;padding:5px 10px;background:#0d9488;color:#fff" onclick="exportBundleEnrollTemplate('${deptId}','${bundleId}')">📊 قالب تسجيل Excel</button>
-        <button class="bpri" style="font-size:11px;padding:5px 10px" onclick="printBundle('${deptId}','${bundleId}')">🖨️ طباعة</button>
+        ${editable?`<button class="bdng" style="font-size:11px;padding:5px 10px;border:none;border-radius:6px;cursor:pointer" onclick="clearBundleInstructor('${deptId}','${bundleId}')">👤 مسح المدربين</button>`:''}
       </div>
     </h3>
     <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px">${legend}</div>
