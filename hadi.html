@@ -3048,7 +3048,8 @@ function setupHTML(deptId){
 const sectionsListHTML=secs.length?secs.map(x=>{
     const specName=x.specId?(specs.find(s=>s.id===x.specId)||{}).name:'';
     const meta=`<div class="rcm">${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
-    return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct">${x.code ? `<span style="font-family:monospace;color:var(--ac);font-weight:800;margin-left:4px">${esc(x.code)}</span>` : ''}${esc(x.name)}</div>${meta}</div>
+    const displayCode = x.code ? `<span style="font-family:monospace;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:11px">${esc(x.code)}</span>` : `<span style="font-family:monospace;background:#f1f5f9;color:#94a3b8;padding:1px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:10px">بدون رمز</span>`;
+    return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct" style="display:flex;align-items:center">${displayCode}${esc(x.name)}</div>${meta}</div>
     <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم المرجعي" onclick="editSectionCrn('${deptId}','${x.id}')">🔢</button>
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('section','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('section','${deptId}','${x.id}')">🗑️</button>
@@ -12316,10 +12317,9 @@ window.executeAutoDistribution = function(dId) {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
-        // 💡 بناء بنك الأرقام بالاعتماد على رمز المقرر (Code) الحرفي المستخرج من عمود "المقرر" في SS01
+    // 💡 بناء بنك الأرقام بذكاء: الاعتماد على (الرمز الموحد) كأولوية، ثم (الاسم الموحد) كاحتياطي ممتاز
             const crnBank = {}; 
             
-            // 💡 إصلاح: جلب الشُعب من كافة أقسام الكلية حتى نلتقط أرقام قسم الدراسات العامة والحاسب
             const sectionsToScan = [];
             getDepts().forEach(d => sectionsToScan.push(...getSections(d.id)));
 
@@ -12327,11 +12327,20 @@ window.executeAutoDistribution = function(dId) {
                 if (s.crn) {
                     const crnClean = String(s.crn).trim();
                     const codeKey = s.code ? normCode(s.code) : '';
+                    const nameKey = s.name ? normName(s.name) : '';
 
+                    // 1. التخزين بناءً على الرمز
                     if (codeKey) {
                         if (!crnBank[codeKey]) crnBank[codeKey] = [];
                         if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
                             crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code });
+                        }
+                    }
+                    // 2. التخزين بناءً على الاسم (مهم جداً للمقررات التي فقدت رمزها أثناء الاستيراد)
+                    if (nameKey) {
+                        if (!crnBank[nameKey]) crnBank[nameKey] = [];
+                        if (!crnBank[nameKey].find(x => x.crn === crnClean)) {
+                            crnBank[nameKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code });
                         }
                     }
                 }
@@ -12405,13 +12414,16 @@ window.executeAutoDistribution = function(dId) {
                         const sessionsToPlace = sessionsNeeded - currentPlaced;
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
-                     
-// 💡 البحث الذكي الثلاثي للرقم المرجعي (1. بالرمز الموحد -> 2. بالاسم الدقيق -> 3. بالاسم المرن المقطوع)
-                  // 💡 البحث برمز المقرر الموحد حصراً (تطابق تام بالرمز الموجود في عمود "المقرر" بملف SS01)
+                                           
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
+                        const targetNameKey = normName(c.name);
 
-                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                        let availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                        
+                        if ((!availableCrnList || availableCrnList.length === 0) && targetNameKey && crnBank[targetNameKey]) {
+                            availableCrnList = crnBank[targetNameKey];
+                        }
 
                         if (availableCrnList && availableCrnList.length > 0) {
                             let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
