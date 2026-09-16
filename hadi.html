@@ -1140,9 +1140,29 @@ function findRoomConflict(dId,entityId,di,pi,roomId){
 // قد يتكرر رقمها المرجعي خطأً بقسم مختلف تمامًا
 function findCrnDuplicate(dId,entityId,di,pi,crn,currentSubj){
   if(!crn)return null;
+  // البحث عبر جميع الأقسام
   for(const dept of getDepts()){
-    for(const s of getSections(dept.id)){const g=getGrid(s.id);for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){if(s.id===entityId&&d===di&&p===pi)continue;const cell=g[d]&&g[d][p];if(!cell||cell.crn!==crn)continue;if(s.id===entityId&&cell.subj===currentSubj)continue;return {name:s.name};}}
-    for(const b of getBundles(dept.id)){const g=getBundleGrid(b.id);for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){if(b.id===entityId&&d===di&&p===pi)continue;const cell=g[d]&&g[d][p];if(!cell||cell.crn!==crn)continue;if(b.id===entityId&&cell.subj===currentSubj)continue;return {name:b.name};}}
+    for(const s of getSections(dept.id)){
+      const g=getGrid(s.id);
+      for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){
+        if(s.id===entityId&&d===di&&p===pi)continue;
+        const cell=g[d]&&g[d][p];
+        if(!cell||cell.crn!==crn)continue;
+        // إذا كان نفس المقرر، فالمشاركة مسموحة وليست تعارضاً
+        if(cell.subj===currentSubj)continue;
+        return {name:s.name};
+      }
+    }
+    for(const b of getBundles(dept.id)){
+      const g=getBundleGrid(b.id);
+      for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){
+        if(b.id===entityId&&d===di&&p===pi)continue;
+        const cell=g[d]&&g[d][p];
+        if(!cell||cell.crn!==crn)continue;
+        if(cell.subj===currentSubj)continue;
+        return {name:b.name};
+      }
+    }
   }
   return null;
 }
@@ -3807,7 +3827,12 @@ window.renderBundleGrid = function(deptId,bundle,editable){
     const rowStyle=c.cat==='sup'?'background:#fffbeb':c.cat==='comp'?'background:#f5f3ff':'';
     return `<tr class="legend-row" style="${rowStyle}">
       <td><span style="display:inline-block;width:12px;height:12px;background:${color};border-radius:3px;vertical-align:middle"></span></td>
-      <td class="legend-name-cell">${catBadge}${esc(c.name)}${detailHtml}${warningHtml}</td>
+      <td class="legend-name-cell">
+  ${catBadge}
+  ${c.code ? `<span style="font-family:monospace;background:#f1f5f9;color:#1e40af;border:1px solid #cbd5e1;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;margin-left:5px">${esc(c.code)}</span>` : ''}
+  <strong>${esc(c.name)}</strong>
+  ${detailHtml}${warningHtml}
+</td>
       <td class="legend-hours-cell">${needed} لقاء<br/><span style="font-size:9px;color:var(--mu)">${displayHours} سا</span></td>
       <td class="legend-crns-cell">${crnChips||'<span style="color:var(--mu);font-size:10px">—</span>'}</td>
       <td>${counter}</td>
@@ -12118,23 +12143,27 @@ window.executeAutoDistribution = function(dId) {
 
         const missingCrnsLog = new Set(); 
 
-        // 💡 تحويل الأرقام المشرقية (١ ٢ ٣) إلى قياسية (1 2 3) وتطبيع الرموز
-        const convertArabicDigits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
-
-        const normCode = s => convertArabicDigits(s)
-            .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
-            .replace(/[إأآا]/g, 'ا')
-            .trim()
-            .toUpperCase();
-
+      // دالة تنظيف وتوحيد الأسماء (تزيل أل التعريف لمطابقة "الكتابة الفنية" مع "كتابة فنية")
         const normName = s => (s || '')
             .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
             .replace(/[إأآا]/g, 'ا')
             .replace(/ة/g, 'ه')
             .replace(/[يى]/g, 'ي')
+            .replace(/^ال/, '') // إزالة أل التعريف من بداية الكلمة الأولى
+            .replace(/ال/g, '')  // إزالة أل التعريف العامة للمطابقة المرنة
             .trim();
 
-        // بناء خريطة الأرقام المرجعية لجميع المقررات في الكلية (من واقع ملفات رايات المرفوعة)
+        // دالة تنظيف الرموز وتوحيدها (تحويل الأرقام العربية ودعم صيغ عربي وعرب)
+        const convertArabicDigits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+        const normCode = s => convertArabicDigits(s)
+            .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/^عربي/, 'عرب') // توحيد عربي-101 مع عرب-101
+            .replace(/^رياضيات/, 'رياض') // توحيد رياضيات-101 مع رياض-101
+            .trim()
+            .toUpperCase();
+  
+        // بناء خريطة الأرقام المرجعية لجميع المقررات في الكلية 
         const crnToOfficialCodeMap = {};
         const typeMap = ls('pq_crn_type_map_' + dId, {});
         getDepts().forEach(d => {
