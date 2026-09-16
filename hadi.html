@@ -1646,7 +1646,7 @@ function busyNoteText(info,curDeptId,isRoom){
   return (isRoom?' ⛔ محجوزة: ':' ⚠️ مشغول: ')+where+other;
 }
 function _fillInsSelect(dId,cellInsId){
-  const isAdmin = CU && (CU.role === 'admin' || CU.role === 'vdean';
+  const isAdmin = CU && (CU.role === 'admin' || CU.role === 'vdean');
   const wrap=document.getElementById('cm-ins-override-wrap');
   if(wrap)wrap.style.display=isAdmin?'block':'none';
   const overrideChk=document.getElementById('cm-ins-override');
