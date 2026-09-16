@@ -3038,18 +3038,19 @@ function renderDeptTabContent(deptId){
 }
 
 // ── SETUP TAB ──
-
 function setupHTML(deptId){
   const secs=getSections(deptId), ins=getInstructors(deptId), subs=getSubjects(deptId), specs=getSpecs(deptId), rooms=getRooms(deptId);
   const listHTML=(arr,type,icon)=>arr.length?arr.map(x=>`<div class="rc"><span class="rci">${icon}</span><div class="rcb"><div class="rct">${esc(x.name)}</div></div>
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('${type}','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('${type}','${deptId}','${x.id}')">🗑️</button>
   </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
-const sectionsListHTML=secs.length?secs.map(x=>{
+  
+  const sectionsListHTML=secs.length?secs.map(x=>{
     const specName=x.specId?(specs.find(s=>s.id===x.specId)||{}).name:'';
     const meta=`<div class="rcm">${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
-    const displayCode = x.code ? `<span style="font-family:monospace;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:11px">${esc(x.code)}</span>` : `<span style="font-family:monospace;background:#f1f5f9;color:#94a3b8;padding:1px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:10px">بدون رمز</span>`;
+    const displayCode = x.code ? `<span style="font-family:monospace;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:11px">${esc(x.code)}</span>` : `<span style="font-family:monospace;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:6px;font-size:10px">بدون رمز</span>`;
     return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct" style="display:flex;align-items:center">${displayCode}${esc(x.name)}</div>${meta}</div>
+    <button class="bedt" style="padding:4px 8px;font-size:11px" title="تعديل الرمز يدوياً" onclick="editSectionCodePrompt('${deptId}','${x.id}')">🏷️</button>
     <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم المرجعي" onclick="editSectionCrn('${deptId}','${x.id}')">🔢</button>
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('section','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('section','${deptId}','${x.id}')">🗑️</button>
@@ -3068,7 +3069,7 @@ const sectionsListHTML=secs.length?secs.map(x=>{
   const specOptions=specs.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const missingRoomsCount=countMissingRooms(deptId);
   return `${plansHTML(deptId)}<div class="g3 g4">
-    <div class="panel"><h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><span>📘 الشعب (${secs.length})</span><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="badge ${missingRoomsCount>0?'br':'bg'}" style="font-size:11px" title="يبيّن عدد المحاضرات اللي ما لها قاعة معيّنة بعد ضمن مقررات القسم">🚪 ${missingRoomsCount>0?missingRoomsCount+' محاضرة بدون قاعة (مقررات القسم)':'✅ كل المحاضرات لها قاعة'}</span>${deptId==='it'?`<label class="bpri" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 10px;border-radius:6px" title="ترفع ملف CSV (من نظام رايات - تقارير رايات) فيه أرقام مرجعية جاهزة لحاسب-101/102 لاستخدامها لاحقاً بسرعة عند تعيين المحاضرات">📥 استيراد أرقام حاسب-101/102<input type="file" accept=".csv" style="display:none" onchange="importComputerCrnPool(this,'${deptId}')"/></label>`:''}${`<button class="bdng" style="font-size:11px;padding:4px 10px" onclick="clearAllData('${deptId}')" title="⚠️ يحذف نهائياً كل الشعب والرزم والمدربين والقاعات وجداولها من هذا القسم بالكامل — الشعب/الرزم تختفي من القائمة تمامًا (خطط القسم تبقى كما هي)">🗑️ حذف جميع البيانات</button>`}</div></h3>
+    <div class="panel"><h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">   <span>📘 الشعب (${secs.length})</span>   <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">     <button class="bgr" style="font-size:11px;padding:4px 10px;background:#0284c7" onclick="autoFixMissingSectionCodes('${deptId}')" title="يقوم بمطابقة الشعب مع الخطط وتوليد الرموز المفقودة فوراً">🪄 استنتاج الرموز المفقودة</button>     <span class="badge ${missingRoomsCount>0?'br':'bg'}" style="font-size:11px">🚪 ${missingRoomsCount>0?missingRoomsCount+' محاضرة بدون قاعة':'✅ كل المحاضرات لها قاعة'}</span>     <button class="bdng" style="font-size:11px;padding:4px 10px" onclick="clearAllData('${deptId}')">🗑️ حذف جميع البيانات</button>   </div> </h3><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="badge ${missingRoomsCount>0?'br':'bg'}" style="font-size:11px" title="يبيّن عدد المحاضرات اللي ما لها قاعة معيّنة بعد ضمن مقررات القسم">🚪 ${missingRoomsCount>0?missingRoomsCount+' محاضرة بدون قاعة (مقررات القسم)':'✅ كل المحاضرات لها قاعة'}</span>${deptId==='it'?`<label class="bpri" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 10px;border-radius:6px" title="ترفع ملف CSV (من نظام رايات - تقارير رايات) فيه أرقام مرجعية جاهزة لحاسب-101/102 لاستخدامها لاحقاً بسرعة عند تعيين المحاضرات">📥 استيراد أرقام حاسب-101/102<input type="file" accept=".csv" style="display:none" onchange="importComputerCrnPool(this,'${deptId}')"/></label>`:''}${`<button class="bdng" style="font-size:11px;padding:4px 10px" onclick="clearAllData('${deptId}')" title="⚠️ يحذف نهائياً كل الشعب والرزم والمدربين والقاعات وجداولها من هذا القسم بالكامل — الشعب/الرزم تختفي من القائمة تمامًا (خطط القسم تبقى كما هي)">🗑️ حذف جميع البيانات</button>`}</div></h3>
       <div class="rlist">${sectionsListHTML}</div>
       <div style="display:flex;gap:6px;margin-top:12px">
         <input type="text" id="new-sec" placeholder="مثال: شعبة A" onkeydown="if(event.key==='Enter')addSection('${deptId}')" style="flex:1;background:#f8fafc;border:1.5px solid var(--bd);border-radius:8px;padding:8px 10px;font-size:12px;outline:none;color:var(--tx)"/>
@@ -12056,6 +12057,69 @@ window.applyWizardSS07Mapping = function(dId) {
         console.error(err);
         showToastMsg('❌ حدث خطأ أثناء الاستنتاج');
     }
+};
+
+  // 💡 دالة لإصلاح واستنتاج رموز المقررات للشعب التي تظهر بدون رمز
+window.autoFixMissingSectionCodes = function(dId) {
+    const secs = getSections(dId);
+    let fixed = 0;
+
+    // استخراج جميع المقررات ورموزها من خطط كافة الأقسام
+    const allPlanCourses = [];
+    getDepts().forEach(d => {
+        getSpecs(d.id).forEach(sp => {
+            getPlan(d.id, sp.id).forEach(c => {
+                if (c.name && c.code) {
+                    allPlanCourses.push({
+                        name: normName(c.name),
+                        code: c.code.trim(),
+                        rawName: c.name
+                    });
+                }
+            });
+        });
+    });
+
+    secs.forEach(s => {
+        if (!s.code || !s.code.trim()) {
+            // 1. محاولة استخراج الرمز إذا كان مكتوباً داخل الاسم (مثل: انجل-101)
+            const match = (s.name || '').match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
+            if (match) {
+                s.code = match[1].trim();
+                fixed++;
+                return;
+            }
+
+            // 2. مطابقة الاسم مع أسماء المقررات في الخطط المعتمدة
+            const targetName = normName(s.name);
+            const found = allPlanCourses.find(c => targetName.includes(c.name) || c.name.includes(targetName));
+            if (found) {
+                s.code = found.code;
+                fixed++;
+            }
+        }
+    });
+
+    if (fixed > 0) {
+        saveSections(dId, secs);
+        renderDeptTabContent(dId);
+        showToastMsg(`✅ تم استنتاج وتعيين الرموز تلقائياً لـ ${fixed} شعبة بنجاح!`);
+    } else {
+        showToastMsg('ℹ️ لم يتم العثور على رموز جديدة لتحديثها.');
+    }
+};
+
+// دالة لتعديل الرمز يدوياً في حال الرغبة
+window.editSectionCodePrompt = function(dId, secId) {
+    const arr = getSections(dId);
+    const sec = arr.find(s => s.id === secId);
+    if (!sec) return;
+    const val = prompt(`أدخل رمز المقرر للشعبة "${sec.name}":`, sec.code || '');
+    if (val === null) return;
+    sec.code = val.trim();
+    saveSections(dId, arr);
+    renderDeptTabContent(dId);
+    showToastMsg('✅ تم تحديث رمز الشعبة');
 };
 
 window.openAutoDistWizard = function(dId) {
