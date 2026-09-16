@@ -577,7 +577,25 @@ function isCompCourseByName(name) {
 }
 
 let CU = null, currentDept = null, deptActiveTab = 'grid', settingsTab = 'depts';
+// دوال عامة موحدة لتطبيع الرموز والأسماء في كامل النظام
+const convertArabicDigits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 
+const normCode = s => convertArabicDigits(s)
+    .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/^عربي/, 'عرب')
+    .replace(/^رياضيات/, 'رياض')
+    .trim()
+    .toUpperCase();
+
+const normName = s => (s || '')
+    .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/[يى]/g, 'ي')
+    .replace(/^ال/, '')
+    .replace(/ال/g, '')
+    .trim();
 // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
 function canUserManageCourse(cName, cCat, targetDeptId) {
     if (!CU) return false;
