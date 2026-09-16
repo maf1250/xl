@@ -11625,12 +11625,12 @@ window.executeAutoDistribution = function(dId) {
             configsByDept[tDept].push(conf);
         });
 
-        const missingCrnsLog = new Set(); // لتسجيل المقررات التي لم يتبق لها أرقام مرجعية
+        const missingCrnsLog = new Set(); 
 
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             const targetDeptBundles = getBundles(targetDeptId);
+            const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
-            // 💡 1. بناء بنك الأرقام المرجعية وسعتها
             const crnBank = {}; 
             getSections(targetDeptId).forEach(s => {
                 if (s.crn && s.name) {
@@ -11672,7 +11672,9 @@ window.executeAutoDistribution = function(dId) {
                 for (let i = 0; i < conf.count; i++) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
-                    const bStudents = bundle.students || 20; // تقدير عدد الطلاب لتوزيع الأرقام المرجعية
+                    const bStudents = bundle.students || 20; 
+                    // 💡 بناء اسم السياق الشامل للشعبة ليظهر بشكل واضح في المودال للمستخدم
+                    const fullBundleContext = `${bundle.name} (${targetDeptName}) ${sp.name} / ${conf.level}`;
 
                     let bundleOffDay = null;
                     if (compress4Days) {
@@ -11700,6 +11702,15 @@ window.executeAutoDistribution = function(dId) {
                         return load;
                     };
 
+                    const getCoursePlacedCount = (cName) => {
+                        let cnt = 0;
+                        bGrid.forEach(day => day.forEach(cell => {
+                            if (cell && cell.subj === cName) cnt++;
+                            if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++;
+                        }));
+                        return cnt;
+                    };
+
                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
@@ -11711,29 +11722,31 @@ window.executeAutoDistribution = function(dId) {
                         }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         
-                        // 💡 2. اختيار الرقم المرجعي المناسب ومشاركته
-                        let chosenCrn = '';
-                        if (crnBank[c.name]) {
-                            // البحث عن رقم مرجعي ما زال فيه سعة للطلاب
-                            let crnObj = crnBank[c.name].find(x => (x.cap - x.used) >= bStudents);
-                            if (crnObj) {
-                                chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // استهلاك السعة
-                            } else {
-                                missingCrnsLog.add(`- ${c.name} (في ${bundle.name}): لا يوجد سعة في الأرقام المرجعية المتاحة.`);
-                            }
-                        } else {
-                            missingCrnsLog.add(`- ${c.name} (في ${bundle.name}): لا يوجد أرقام مرجعية مسجلة للمادة.`);
-                        }
-
+                        let currentPlaced = getCoursePlacedCount(c.name);
+                        if (currentPlaced >= sessionsNeeded) return;
+                        
+                        const sessionsToPlace = sessionsNeeded - currentPlaced;
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
+                        let chosenCrn = '';
+                        if (crnBank[c.name]) {
+                            let crnObj = crnBank[c.name].find(x => (x.cap - x.used) >= bStudents);
+                            if (crnObj) {
+                                chosenCrn = crnObj.crn;
+                                crnObj.used += bStudents;
+                            } else {
+                                missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا يوجد سعة في الأرقام المرجعية المتاحة.`);
+                            }
+                        } else {
+                            missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا يوجد أرقام مرجعية مسجلة للمادة.`);
+                        }
+
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
 
-                        for (let sess = 0; sess < sessionsNeeded; sess++) {
-                            const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
+                        for (let sess = 0; sess < sessionsToPlace; sess++) {
+                            const isHalf = isSplitCourse && (currentPlaced + sess) === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                                                     
                             let candidateDays = [0, 1, 2, 3, 4].filter(d => !usedDaysForCourse.has(d));
@@ -11785,7 +11798,7 @@ window.executeAutoDistribution = function(dId) {
                                             subj: c.name,
                                             insId: chosenIns || '',
                                             roomId: chosenRoom || '',
-                                            crn: chosenCrn, // إسناد الرقم المرجعي الذي تم اختياره
+                                            crn: chosenCrn, 
                                             duration: dur,
                                             halfOnly: isHalf ? true : undefined,
                                           cellType: isPhysicsExempt ? 'theory' : ((parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory')  
@@ -11832,7 +11845,7 @@ window.executeAutoDistribution = function(dId) {
 };
   
 // =========================================================================
-// ══ معالج رفع تقارير الوحدة التدريبية الشامل (للأدمن والوكيل) - المطور ══
+// ══ معالج رفع تقارير الوحدة التدريبية الشامل ══
 // =========================================================================
 
 function openUnitReportsWizard() {
