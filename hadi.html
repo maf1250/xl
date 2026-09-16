@@ -12304,7 +12304,7 @@ window.executeAutoDistribution = function(dId) {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
-          // بناء بنك الأرقام المرجعية (يدعم الرمز أولاً، وإن لم يوجَد يعتمد الاسم المرن للتغلب على مشاكل الاقتطاع)
+        // 💡 بناء بنك الأرقام المرجعية بدقة متناهية مع الفصل التام بين رياض-101 و رياض-121
             const crnBank = {}; 
             
             const sectionsToScan = [
@@ -12315,27 +12315,32 @@ window.executeAutoDistribution = function(dId) {
             sectionsToScan.forEach(s => {
                 if (s.crn) {
                     const crnClean = String(s.crn).trim();
+                    const crnNum = parseInt(crnClean);
                     let codeKey = s.code ? normCode(s.code) : '';
                     
+                    // استخراج الرمز من الاسم لو وجد
                     if (!codeKey && s.name) {
                         const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                         if (m) codeKey = normCode(m[1]);
                     }
 
-                    // مفتاح الرمز
-                    if (codeKey) {
-                        if (!crnBank[codeKey]) crnBank[codeKey] = [];
-                        if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
-                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey });
+                    // 💡 تصحيح تلقائي ذكي جداً للرياضيات بناءً على أرقامها المرجعية الرسمية عندك:
+                    // 255 و 256 تخص رياض-101 حصراً
+                    // 259 وما بعدها تخص رياض-121 حصراً
+                    if (!codeKey && normName(s.name) === 'الرياضيات') {
+                        if (crnNum === 255 || crnNum === 256) {
+                            codeKey = 'ريا١٠١'; // أو رياض101
+                        } else if (crnNum >= 257) {
+                            codeKey = 'ريا١٢١'; // أو رياض121
                         }
                     }
 
-                    // مفتاح الاسم المرن (كاحتياطي أمان دائم لأي مادة مقطوعة مثل المهن والمهني)
-                    if (s.name) {
-                        const nameKey = 'NAME_' + normName(s.name);
-                        if (!crnBank[nameKey]) crnBank[nameKey] = [];
-                        if (!crnBank[nameKey].find(x => x.crn === crnClean)) {
-                            crnBank[nameKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawName: s.name });
+                    // تطبيع الرمز النهائي
+                    if (codeKey) {
+                        codeKey = normCode(codeKey);
+                        if (!crnBank[codeKey]) crnBank[codeKey] = [];
+                        if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
+                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey });
                         }
                     }
                 }
