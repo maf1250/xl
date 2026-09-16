@@ -2856,14 +2856,7 @@ function gridTabHTML(deptId){
 
   if (deptId === 'sup') {
       const sets = buildSupItNameSets();
-      const isMyCourse = (subj) => {
-          if (!subj) return false;
-          if (deptId === 'sup') return sets.supNames.has(subj);
-          if (deptId === 'it') return sets.itNames.has(subj);
-          return false;
-      };
-
-     const crossBundles = [];
+      const crossBundles = [];
       getDepts().forEach(d => {
           if (d.id === deptId) return;
           getBundles(d.id).forEach(b => {
@@ -2881,19 +2874,18 @@ function gridTabHTML(deptId){
   const secs = getSections(deptId);
   const hasSpecs = (deptId === 'sup' || deptId === 'it') ? getDepts().some(d => getSpecs(d.id).length > 0) : specs.length > 0;
 
-// باليت ألوان متباينة وثابتة لكل تخصص
+  // باليت ألوان متباينة وثابتة لكل تخصص
   const SPEC_PALETTE = [
-    { border: '#0284c7', bg: '#f0f9ff', badge: '#e0f2fe', text: '#0369a1' }, // أزرق سماوي
-    { border: '#16a34a', bg: '#f0fdf4', badge: '#dcfce7', text: '#15803d' }, // أخضر
-    { border: '#7c3aed', bg: '#faf5ff', badge: '#f3e8ff', text: '#6d28d9' }, // بنفسجي
-    { border: '#d97706', bg: '#fffbeb', badge: '#fef3c7', text: '#b45309' }, // كهرماني
-    { border: '#dc2626', bg: '#fef2f2', badge: '#fee2e2', text: '#b91c1c' }, // أحمر مرجاني
-    { border: '#0d9488', bg: '#f0fdfa', badge: '#ccfbf1', text: '#0f766e' }, // تيل تركوازي
-    { border: '#4f46e5', bg: '#eef2ff', badge: '#e0e7ff', text: '#3730a3' }, // نيلي
-    { border: '#db2777', bg: '#fdf2f8', badge: '#fce7f3', text: '#be185d' }, // وردي غامق
+    { border: '#0284c7', bg: '#f0f9ff', badge: '#e0f2fe', text: '#0369a1' },
+    { border: '#16a34a', bg: '#f0fdf4', badge: '#dcfce7', text: '#15803d' },
+    { border: '#7c3aed', bg: '#faf5ff', badge: '#f3e8ff', text: '#6d28d9' },
+    { border: '#d97706', bg: '#fffbeb', badge: '#fef3c7', text: '#b45309' },
+    { border: '#dc2626', bg: '#fef2f2', badge: '#fee2e2', text: '#b91c1c' },
+    { border: '#0d9488', bg: '#f0fdfa', badge: '#ccfbf1', text: '#0f766e' },
+    { border: '#4f46e5', bg: '#eef2ff', badge: '#e0e7ff', text: '#3730a3' },
+    { border: '#db2777', bg: '#fdf2f8', badge: '#fce7f3', text: '#be185d' },
   ];
 
-  // دالة إعطاء لون ثابت لكل تخصص
   const getSpecColor = (sName) => {
     if (!sName) return SPEC_PALETTE[0];
     let hash = 0;
@@ -2967,7 +2959,6 @@ function gridTabHTML(deptId){
 
   const tabsWrap=bundles.length?`<div class="bundle-tabs-wrap">${bundleTabs}</div>`:'';
   
-  // 💡 التعديل الجذري هنا: جلب كل النواقص بدقة مع التفاصيل
   const missingData = getMissingDataDetails(deptId);
   const missingMsgs = formatMissingDataMessage(missingData);
   const hasMissing = missingData.rooms.length > 0 || missingData.ins.length > 0 || missingData.crns.length > 0;
@@ -2978,7 +2969,6 @@ function gridTabHTML(deptId){
       <button type="button" class="bgr" style="font-size:11px;padding:5px 10px;background:#d97706;color:#fff" onclick="undoLastChange()" title="تراجع عن آخر خطوة">↩️ تراجع</button>
       <button type="button" class="bpri" style="font-size:11px;padding:5px 10px;background:#0369a1" onclick="downloadSectionsMenu('${deptId}')">📥 تنزيل</button>
       
-      <!-- مؤشرات النواقص -->
       <span class="badge ${missingData.rooms.length>0?'br':'bg'}" style="font-size:11px">🚪 ${missingData.rooms.length>0?missingData.rooms.length+' بدون قاعة':'✅ القاعات مكتملة'}</span>
       <span class="badge ${missingData.ins.length>0?'br':'bg'}" style="font-size:11px">👤 ${missingData.ins.length>0?missingData.ins.length+' بدون مدرب':'✅ المدربون مكتملون'}</span>
       <span class="badge ${missingData.crns.length>0?'br':'bg'}" style="font-size:11px">🔢 ${missingData.crns.length>0?missingData.crns.length+' بدون رقم مرجعي':'✅ الأرقام مكتملة'}</span>
@@ -2986,7 +2976,6 @@ function gridTabHTML(deptId){
       ${missingData.rooms.length>0 ? `<button type="button" class="bpu" style="font-size:11px;padding:5px 10px;background:#0d9488" onclick="autoAssignRooms('${deptId}')">🚪 توزيع القاعات تلقائياً</button>` : ''}
     </div>
     
-    <!-- صندوق التفاصيل المتقدم -->
     ${hasMissing?`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:11.5px;color:#7f1d1d;max-height:180px;overflow-y:auto;box-shadow:inset 0 2px 4px rgba(0,0,0,0.05)">
       <strong style="display:block;margin-bottom:8px;font-size:13px;color:#991b1b">⚠️ تفاصيل النواقص في جداول هذا القسم:</strong> 
       ${missingMsgs.join('')}
