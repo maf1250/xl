@@ -3875,7 +3875,7 @@ const legendRows = (() => {
       const ok = (scheduled >= needed);
       const remaining = Math.max(0, needed - scheduled);
 
-      // مطابقة ذكية تعتمد على رمز المقرر (Code) كأولوية قصوى، ثم الاسم كاحتياط عبر كل الكلية
+     // 💡 مطابقة حصرية وصارمة برمز المقرر (تمنع تماماً خلط رياض-101 مع رياض-121)
       const targetCodeNorm = c.code ? normCode(c.code) : '';
       const targetNameNorm = normName(c.name);
 
@@ -3884,17 +3884,19 @@ const legendRows = (() => {
           const sNameNorm = normName(s.name);
           
           let isMatch = false;
-          if (targetCodeNorm && sCodeNorm) {
-              isMatch = (sCodeNorm === targetCodeNorm);
-          } else if (targetCodeNorm && s.name) {
-              // استخراج الرمز من اسم الشعبة إن لم يكن مخزناً في s.code
-              const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
-              if (m && normCode(m[1]) === targetCodeNorm) isMatch = true;
-          }
           
-          // احتياط بالاسم إذا تعذر الرمز
-          if (!isMatch) {
-              isMatch = (sNameNorm === targetNameNorm || sNameNorm.includes(targetNameNorm) || targetNameNorm.includes(sNameNorm));
+          // 1. إذا كان رمز المقرر موجوداً في الخطة (وهو الأصل)، فالمطابقة بالرمز فقط لا غير
+          if (targetCodeNorm) {
+              if (sCodeNorm) {
+                  isMatch = (sCodeNorm === targetCodeNorm);
+              } else if (s.name) {
+                  // فحص إذا كان الرمز مدمجاً في الاسم
+                  const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
+                  if (m) isMatch = (normCode(m[1]) === targetCodeNorm);
+              }
+          } else {
+              // 2. إذا وفقط إذا كان المقرر في الخطة بلا رمز أصلاً، نطابق بالاسم
+              isMatch = (sNameNorm === targetNameNorm);
           }
 
           return isMatch && s.crn && !usedCrns.has(s.crn);
