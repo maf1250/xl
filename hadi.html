@@ -1518,55 +1518,51 @@ function processScheduleCSV(dId,text){
 // يقرأ ملف SS01 (جدول الطولي) بالاعتماد على **اسم** العمود لا موقعه — إصلاح جذري لخلل كان يقرأ
 // أعمدة بمواقع ثابتة (مثل r[5] كاسم مقرر)، فإذا اختلف ترتيب أعمدة الملف المرفوع عن المتوقع، كان
 // يُدخل بيانات خاطئة تمامًا (مثل اسم مدرّب بدل اسم مقرر) دون أي تحذير — وهذا هو سبب "الشعب" الفاسدة
-function processSectionListCSV(dId,text){
-  const delim=detectDelimiter(text);
-  const rows=parseDelimitedCSV(text,delim);
-  if(rows.length<2)return;
-  const header=rows[0].map(h=>String(h==null?'':h).trim());
-  const iCode=header.indexOf('المقرر');
-  const iName=findColIndex(header,['اسم المقرر','وصف المقرر']);
-  const iCrn=header.indexOf('الرقم المرجعي');
-  const iSectionType=findColIndex(header,['نوع الشعبة','نوع التدريب']);
-  const iSchedType=header.indexOf('نوع الجدولة');
-  if(iName===-1||iCrn===-1)return; // تنسيق غير معروف — لا نخاطر بإدخال بيانات خاطئة
-  let secs=getSections(dId);const subList=getSubjects(dId);
-  const typeMap=ls('pq_crn_type_map_'+dId,{});
-  let typeMapChanged=false;
-  rows.slice(1).forEach(r=>{
-    const code=iCode>-1?String(r[iCode]==null?'':r[iCode]).trim():'';
-    const desc=String(r[iName]==null?'':r[iName]).trim();
-    const crn=String(r[iCrn]==null?'':r[iCrn]).trim();
-    if(!crn||!desc)return;
-    let courseName=desc,specId='',level='';
-    const match=findPlanCourse(dId,code);
-    if(match){courseName=match.course.name;specId=match.spec.id;level=match.course.level;}
-    if(secs.find(s=>s.name===courseName&&s.crn===crn))return;
-    let sec = secs.find(s => (s.code === code || s.name === courseName) && !s.crn);
+function processSectionListCSV(dId, text){
+  const delim = detectDelimiter(text);
+  const rows = parseDelimitedCSV(text, delim);
+  if(rows.length < 2) return;
+  const header = rows[0].map(h => String(h == null ? '' : h).trim());
+  
+  // عمود الرمز في رايات غالباً اسمه "المقرر"
+  const iCode = header.indexOf('المقرر');
+  const iName = findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
+  const iCrn = header.indexOf('الرقم المرجعي');
+  const iSectionType = findColIndex(header, ['نوع الشعبة', 'نوع التدريب']);
+  const iSchedType = header.indexOf('نوع الجدولة');
+  
+  if(iName === -1 || iCrn === -1) return;
+  let secs = getSections(dId);
+  const typeMap = ls('pq_crn_type_map_'+dId, {});
+  let typeMapChanged = false;
+
+  rows.slice(1).forEach(r => {
+    const code = iCode > -1 ? String(r[iCode] == null ? '' : r[iCode]).trim() : '';
+    const desc = String(r[iName] == null ? '' : r[iName]).trim();
+    const crn = String(r[iCrn] == null ? '' : r[iCrn]).trim();
+    if(!crn || !desc) return;
+
+    let courseName = desc, specId = '', level = '';
+    const match = findPlanCourse(dId, code);
+    if(match){ courseName = match.course.name; specId = match.spec.id; level = match.course.level; }
+
+    let sec = secs.find(s => s.crn === crn || (s.name === courseName && !s.crn));
     if(sec){
-        sec.crn = crn;
-        if(code) sec.code = code;
+       sec.crn = crn;
+       if(code) sec.code = code;
     } else {
-        secs.push({
-            id: genId(),
-            name: courseName,
-            code: code || '',
-            crn,
-            specId,
-            level,
-            capacity: DEFAULT_CAPACITY
-        });
+       secs.push({ id: genId(), name: courseName, code: code || '', crn, specId, level, capacity: DEFAULT_CAPACITY });
     }
-    // التقط نوع المحاضرة (نظري/عملي/عن بُعد) من نفس الملف — يفضّل "نوع الجدولة"، وإلا "نوع الشعبة"
-    const rawType=iSchedType>-1?String(r[iSchedType]||''):(iSectionType>-1?String(r[iSectionType]||''):'');
-    const cellType=normalizeBannerSectionType(rawType);
-    if(cellType&&(!typeMap[crn]||typeMap[crn].cellType!==cellType)){
-      typeMap[crn]={name:courseName,cellType};
-      typeMapChanged=true;
+    
+    const rawType = iSchedType > -1 ? String(r[iSchedType] || '') : (iSectionType > -1 ? String(r[iSectionType] || '') : '');
+    const cellType = normalizeBannerSectionType(rawType);
+    if(cellType && (!typeMap[crn] || typeMap[crn].cellType !== cellType)){
+      typeMap[crn] = { name: courseName, cellType };
+      typeMapChanged = true;
     }
   });
-  saveSections(dId,secs);saveSubjects(dId,subList);
-  if(typeMapChanged)ss('pq_crn_type_map_'+dId,typeMap);
-  return typeMapChanged;
+  saveSections(dId, secs);
+  if(typeMapChanged) ss('pq_crn_type_map_'+dId, typeMap);
 }
 function importScheduleCSV(dId,file){const reader=new FileReader();reader.onload=e=>{const r=processScheduleCSV(dId,e.target.result);if(r.error){showToastMsg('❌ '+r.error);return;}renderDeptTabContent(dId);showToastMsg(`✅ تم التحديث: ${r.newIns} مدرّب جديد${r.updatedIns?`، ${r.updatedIns} تحديث رقم وظيفي`:''}${r.newRooms?`، ${r.newRooms} قاعة جديدة`:''}`);};reader.readAsText(file,'UTF-8');}
 function importSectionListCSV(dId,file){const reader=new FileReader();reader.onload=e=>{const typeMapChanged=processSectionListCSV(dId,e.target.result);renderDeptTabContent(dId);showToastMsg('✅ تم استيراد قائمة الشعب'+(typeMapChanged?' — وتحديث أنواع المحاضرات (نظري/عملي) لهذه الأرقام المرجعية':''));};reader.readAsText(file,'UTF-8');}
@@ -12267,6 +12263,7 @@ window.executeAutoDistribution = function(dId) {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
+          // بناء بنك الأرقام المرجعية (يدعم الرمز أولاً، وإن لم يوجَد يعتمد الاسم المرن للتغلب على مشاكل الاقتطاع)
             const crnBank = {}; 
             
             const sectionsToScan = [
@@ -12279,22 +12276,29 @@ window.executeAutoDistribution = function(dId) {
                     const crnClean = String(s.crn).trim();
                     let codeKey = s.code ? normCode(s.code) : '';
                     
-                    // إذا لم يكن الرمز مخزناً في الشعبة، نستخرجه من اسم الشعبة إن وجد (مثل اسلك-201)
                     if (!codeKey && s.name) {
                         const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                         if (m) codeKey = normCode(m[1]);
                     }
 
-                    // 💡 الربط المباشر بالرمز حصراً (تجاهل الاسم نهائياً لمنع مشاكل اقتطاع "المهن" و"المهني")
+                    // مفتاح الرمز
                     if (codeKey) {
                         if (!crnBank[codeKey]) crnBank[codeKey] = [];
                         if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
                             crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey });
                         }
                     }
+
+                    // مفتاح الاسم المرن (كاحتياطي أمان دائم لأي مادة مقطوعة مثل المهن والمهني)
+                    if (s.name) {
+                        const nameKey = 'NAME_' + normName(s.name);
+                        if (!crnBank[nameKey]) crnBank[nameKey] = [];
+                        if (!crnBank[nameKey].find(x => x.crn === crnClean)) {
+                            crnBank[nameKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawName: s.name });
+                        }
+                    }
                 }
             });
-  
                   configs.forEach(conf => {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
                 if(!sp) return;
@@ -12365,22 +12369,41 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
+// 💡 البحث الذكي الثلاثي للرقم المرجعي (1. بالرمز الموحد -> 2. بالاسم الدقيق -> 3. بالاسم المرن المقطوع)
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
+                        const targetNameKey = 'NAME_' + normName(c.name);
 
-                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                        let availableCrnList = null;
+                        
+                        if (targetCodeKey && crnBank[targetCodeKey] && crnBank[targetCodeKey].length > 0) {
+                            availableCrnList = crnBank[targetCodeKey];
+                        } else if (crnBank[targetNameKey] && crnBank[targetNameKey].length > 0) {
+                            availableCrnList = crnBank[targetNameKey];
+                        } else {
+                            // مطابقة مرنة للأسماء المقطوعة من رايات (مثل "السلوك الوظيفي... المهن" مع "السلوك الوظيفي... المهني")
+                            const matchedNameKey = Object.keys(crnBank).find(k => {
+                                if (!k.startsWith('NAME_')) return false;
+                                const cleanK = k.replace('NAME_', '');
+                                const cleanC = normName(c.name);
+                                return cleanK.length >= 6 && cleanC.length >= 6 && (cleanK.includes(cleanC) || cleanC.includes(cleanK));
+                            });
+                            if (matchedNameKey) {
+                                availableCrnList = crnBank[matchedNameKey];
+                            }
+                        }
 
                         if (availableCrnList && availableCrnList.length > 0) {
                             let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
                             if (!crnObj) {
-                                crnObj = availableCrnList[0]; 
+                                crnObj = availableCrnList[0]; // استيعاب في أول رقم متاح إذا امتلأت السعة
                             }
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; 
+                                crnObj.used += bStudents; // خصم السعة للرزمة
                             }
                         } else {
-                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق هذا الرمز في بنك الأرقام.`);
+                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق هذا المقرر.`);
                         }
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
