@@ -2175,6 +2175,20 @@ function saveBundleCellModal(){
   const insVal=insId==='__new__'?'':insId;
   const roomVal=roomId==='__newroom__'?'':roomId;
   const ctx=currentCell||currentBundleCell;
+
+  // 🛡️ التحقق من تجاوز الحد الأقصى للمقرر عند الحفظ بالنافذة يدوياً
+  if (ctx && subj && duration !== 3 && duration !== 4) {
+      const isB = !!ctx.bundleId;
+      const entityId = ctx.sectionId || ctx.bundleId;
+      const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
+      const existingCell = g[ctx.di] && g[ctx.di][ctx.pi];
+      const oldSubj = (ctx.subSlot === 'sub2') ? (existingCell && existingCell.sub2 ? existingCell.sub2.subj : '') : (existingCell ? existingCell.subj : '');
+      
+      if (subj !== oldSubj && isCourseLimitReached(ctx.deptId, entityId, isB, subj, oldSubj)) {
+          showToastMsg(`⛔ لا يمكن حفظ "${subj}". لقد اكتمل العدد المطلوب بالجدول.`);
+          return;
+      }
+  }
 // --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
   if (ctx && CU && CU.role === 'head') {
      if (ctx && subj) {
@@ -2444,21 +2458,49 @@ function dropCell(e,dId,sId,di,pi){
 // جدول الرزمة
 function dragBundleCell(e,di,pi){bundleDragSrc={di,pi};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','b');}catch(err){}}
 function dragCourseChip(e,el){chipDragSubj=el.getAttribute('data-course');bundleDragSrc=null;e.dataTransfer.effectAllowed='copy';try{e.dataTransfer.setData('text/plain','chip:'+chipDragSubj);}catch(err){}}
+// دالة التحقق من وصول المقرر للحد الأقصى
+function isCourseLimitReached(dId, entityId, isBundle, subjName, oldSubj) {
+    if (!subjName || subjName === oldSubj) return false;
+    let courseObj = null;
+    getDepts().forEach(d => getSpecs(d.id).forEach(sp => getPlan(d.id, sp.id).forEach(c => {
+        if (c.name === subjName) courseObj = c;
+    })));
+    if (!courseObj) return false;
+
+    let sNeeded = sessionsNeeded(courseObj);
+    if (getExemptPhysicsPractical() && isPhysicsCourse(courseObj.name, courseObj.code)) {
+        sNeeded = 1;
+    }
+
+    let sScheduled = 0;
+    const g = isBundle ? getBundleGrid(entityId) : getGrid(entityId);
+    g.forEach(day => day.forEach(cell => {
+        if (cell && cell.subj === subjName) sScheduled++;
+        if (cell && cell.sub2 && cell.sub2.subj === subjName) sScheduled++;
+    }));
+
+    return sScheduled >= sNeeded;
+}
+
 function dropBundleOrChip(e,dId,bundleId,di,pi){
   e.preventDefault();e.currentTarget.classList.remove('dragover');
   {const _bg=getBundleGrid(bundleId);const _destB=_bg[di]&&_bg[di][pi];if(_destB&&_destB.locked){showToastMsg('🔒 المحاضرة مقفلة');chipDragSubj=null;bundleDragSrc=null;return;}}
   if(chipDragSubj){
     const subj=chipDragSubj;
     chipDragSubj=null;
+    
+    // 🛡️ درع يمنع تجاوز الحد الأقصى للمقرر يدوياً
+    if (isCourseLimitReached(dId, bundleId, true, subj, '')) {
+        showToastMsg(`⛔ لا يمكن إضافة "${subj}". لقد اكتمل العدد المطلوب للمقرر بالجدول. احذف لقاءً قديماً أولاً.`);
+        return;
+    }
+
     if(!canUserManageCourse(subj, null, dId)){
       showToastMsg('⛔ خرق صلاحية: ليس لديك صلاحية لإسناد أو سحب هذا المقرر.');
       return;
     }
     const g=getBundleGrid(bundleId);const ex=g[di]&&g[di][pi]||{};
-    // إذا الخلية ممتدة من محاضرة سابقة، امنع الإفلات المباشر
     if(ex.extendedFrom!==undefined){showToastMsg('⚠️ هذه الخلية ممتدة من محاضرة سابقة — استخدم "مقرر في النصف الآخر"');return;}
-    // ابحث عن اللقاء الأول لنفس المقرر في هذه الرزمة وانسخ كل بياناته: الرقم المرجعي، المدرّب،
-    // القاعة، ونوع المحاضرة — تلقائياً بلا أي نسخ يدوي
     let autoCrn=ex.crn||'',autoIns=ex.insId||'',autoRoom=ex.roomId||'',autoType=ex.cellType||'';
     for(let d=0;d<g.length;d++){for(let p=0;p<(g[d]||[]).length;p++){
       if(d===di&&p===pi)continue;const c=g[d][p];if(!c||c.subj!==subj)continue;
@@ -2467,7 +2509,6 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
       if(!autoRoom&&c.roomId)autoRoom=c.roomId;
       if(!autoType&&c.cellType)autoType=c.cellType;
     }}
-    // فحص التعارض قبل الحفظ
     if(autoIns){
       const conflict=findConflict(dId,bundleId,di,pi,autoIns);
       if(conflict){showToastMsg('⚠️ تعارض — المدرب مشغول في: '+conflict.name);return;}
@@ -2483,7 +2524,6 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
       const roomNm=autoRoom?resolveRoomName(dId,autoRoom):'';
       showToastMsg('✅ نُسخت بيانات اللقاء الأول'+(insNm?' — 👤 '+insNm:'')+(roomNm?' | 🚪 '+roomNm:'')+(autoCrn?' | 🔢 '+autoCrn:'')+roomNote);
     }
-    // احجز مدة اللقاء من ساعات الخطة المعتمدة (SC04) بدل الافتراضي الدائم (ساعتان)
     const autoDur=suggestedDurationInfo({deptId:dId,bundleId,di,pi},subj);
     if(autoDur&&autoDur.duration&&autoDur.duration!==2){
       g[di][pi].duration=autoDur.duration;
@@ -2502,7 +2542,6 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
   }
   {const _bg2=getBundleGrid(bundleId);const _srcB=_bg2[sd]&&_bg2[sd][sp];const _dstB=_bg2[di]&&_bg2[di][pi];if((_srcB&&_srcB.locked)||(_dstB&&_dstB.locked)){showToastMsg('🔒 محاضرة مقفلة — لا يمكن تحريكها');return;}}
   const g=getBundleGrid(bundleId);const src=g[sd][sp];const dest=g[di][pi];
-  // إذا الخلية المستهدفة مشغولة بمقرر مختلف → تحذير
   if(dest&&dest.subj&&src&&src.subj!==dest.subj){showToastMsg('⚠️ الخلية مشغولة بـ"'+dest.subj+'" — امسح محتواها أولاً');return;}
   if(src){const conf=getCellConflicts(dId,bundleId,di,pi,src);if(conf.length){showToastMsg('⚠️ '+conf[0].msg);return;}}
   g[di][pi]=src;g[sd][sp]=dest||null;saveBundleGrid(bundleId,g);renderDeptTabContent(currentDept);
@@ -3585,13 +3624,18 @@ function renderBundleGrid(deptId,bundle,editable){
       ${needsMultiSec?`<span style="background:#fef9c3;color:#854d0e;padding:1px 5px;border-radius:4px;font-weight:700">⚡ لكل شعبة نظرية → ${Math.ceil(capT/capP)} شعبة عملية (ن:${capT}، ع:${capP})</span>`:''}
     </div>`;
 
-    const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>`:'';
-
+const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>`:'';
+    
+    // 🛡️ إصلاح عرض ساعات الفيزياء
+    let displayHours = c.ch || c.total || '—';
+    if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) {
+          displayHours = '2'; 
+         }
     const rowStyle=c.cat==='sup'?'background:#fffbeb':c.cat==='comp'?'background:#f5f3ff':'';
     return `<tr class="legend-row" style="${rowStyle}">
       <td><span style="display:inline-block;width:12px;height:12px;background:${color};border-radius:3px;vertical-align:middle"></span></td>
       <td class="legend-name-cell">${catBadge}${esc(c.name)}${detailHtml}${warningHtml}</td>
-      <td class="legend-hours-cell">${needed} لقاء<br/><span style="font-size:9px;color:var(--mu)">${c.ch||c.total||'—'} سا</span></td>
+      <td class="legend-hours-cell">${needed} لقاء<br/><span style="font-size:9px;color:var(--mu)">${displayHours} سا</span></td>
       <td class="legend-crns-cell">${crnChips||'<span style="color:var(--mu);font-size:10px">—</span>'}</td>
       <td>${counter}</td>
       <td>${dragChip}</td>
@@ -11506,10 +11550,11 @@ window.applyWizardSS07Mapping = function(dId) {
     }
 };
 
-  window.executeAutoDistribution = function(dId) {
+window.executeAutoDistribution = function(dId) {
     try {
         if (!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
 
+        const isServiceDept = (dId === 'sup' || dId === 'it');
         const P = getPeriods();
         const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
         let bundleGlobalIdx = 0;
@@ -11580,8 +11625,21 @@ window.applyWizardSS07Mapping = function(dId) {
             configsByDept[tDept].push(conf);
         });
 
+        const missingCrnsLog = new Set(); // لتسجيل المقررات التي لم يتبق لها أرقام مرجعية
+
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             const targetDeptBundles = getBundles(targetDeptId);
+
+            // 💡 1. بناء بنك الأرقام المرجعية وسعتها
+            const crnBank = {}; 
+            getSections(targetDeptId).forEach(s => {
+                if (s.crn && s.name) {
+                    if (!crnBank[s.name]) crnBank[s.name] = [];
+                    if (!crnBank[s.name].find(x => x.crn === s.crn)) {
+                        crnBank[s.name].push({ crn: s.crn, cap: s.capacity || 40, used: 0 });
+                    }
+                }
+            });
 
             configs.forEach(conf => {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
@@ -11614,6 +11672,7 @@ window.applyWizardSS07Mapping = function(dId) {
                 for (let i = 0; i < conf.count; i++) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
+                    const bStudents = bundle.students || 20; // تقدير عدد الطلاب لتوزيع الأرقام المرجعية
 
                     let bundleOffDay = null;
                     if (compress4Days) {
@@ -11621,7 +11680,6 @@ window.applyWizardSS07Mapping = function(dId) {
                         bundleGlobalIdx++;
                     }
 
-                    // تنظيف الجدول من المقررات التابعة لي قبل التوزيع الجديد
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
                         if (cell) {
                             const mainMine = isCourseMyResponsibility(cell, targetDeptId);
@@ -11642,15 +11700,6 @@ window.applyWizardSS07Mapping = function(dId) {
                         return load;
                     };
 
-                    const getCoursePlacedCount = (cName) => {
-                        let cnt = 0;
-                        bGrid.forEach(day => day.forEach(cell => {
-                            if (cell && cell.subj === cName) cnt++;
-                            if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++;
-                        }));
-                        return cnt;
-                    };
-
                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
@@ -11658,23 +11707,33 @@ window.applyWizardSS07Mapping = function(dId) {
                         
                         if (isPhysicsExempt) {
                             sessionsNeeded = 1;
-                            cHours = 2; // إجبار الساعات على 2
+                            cHours = 2; 
                         }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         
-                        // 🛡️ درع حماية قوي: إذا كان المقرر قد تم استيفاء عدد حصصه مسبقاً، تجاوزه فوراً
-                        let currentPlaced = getCoursePlacedCount(c.name);
-                        if (currentPlaced >= sessionsNeeded) return;
-                        
-                        const sessionsToPlace = sessionsNeeded - currentPlaced;
+                        // 💡 2. اختيار الرقم المرجعي المناسب ومشاركته
+                        let chosenCrn = '';
+                        if (crnBank[c.name]) {
+                            // البحث عن رقم مرجعي ما زال فيه سعة للطلاب
+                            let crnObj = crnBank[c.name].find(x => (x.cap - x.used) >= bStudents);
+                            if (crnObj) {
+                                chosenCrn = crnObj.crn;
+                                crnObj.used += bStudents; // استهلاك السعة
+                            } else {
+                                missingCrnsLog.add(`- ${c.name} (في ${bundle.name}): لا يوجد سعة في الأرقام المرجعية المتاحة.`);
+                            }
+                        } else {
+                            missingCrnsLog.add(`- ${c.name} (في ${bundle.name}): لا يوجد أرقام مرجعية مسجلة للمادة.`);
+                        }
+
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
 
-                        for (let sess = 0; sess < sessionsToPlace; sess++) {
-                            const isHalf = isSplitCourse && (currentPlaced + sess) === (sessionsNeeded - 1);
+                        for (let sess = 0; sess < sessionsNeeded; sess++) {
+                            const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                                                     
                             let candidateDays = [0, 1, 2, 3, 4].filter(d => !usedDaysForCourse.has(d));
@@ -11684,25 +11743,21 @@ window.applyWizardSS07Mapping = function(dId) {
                             preferredDays.sort((a, b) => {
                                 const loadA = getDayLoad(a);
                                 const loadB = getDayLoad(b);
-                                if (loadA !== loadB) return loadB - loadA; // الأيام الممتلئة أولاً لتقليل الفراغات
+                                if (loadA !== loadB) return loadB - loadA; 
                                 return Math.random() - 0.5;
                             });
 
                             let finalDays = [...preferredDays, ...fallbackDays];
                             const prioritizedPeriods = [...Array(P.length).keys()].sort((a, b) => a - b); 
 
-                            // 💥 التعديل الجذري: قلب طريقة البحث! 
-                            // ابحث في م1 في كل الأيام، ثم م2 في كل الأيام لضمان التعبئة الصباحية وعدم التأخير
                             outerLoop:
                             for (let pi of prioritizedPeriods) { 
                                 for (let di of finalDays) {
-                                    // منع تجاوز 3 محاضرات (6 ساعات) في اليوم إلا كملاذ أخير للوقت المتأخر
                                     if (pi < 3 && getDayLoad(di) >= 3 && finalDays.some(d => getDayLoad(d) < 3)) {
                                         continue; 
                                     }
 
                                     const timeKey = `${di}_${pi}`;
-                                    
                                     if (bGrid[di][pi]) continue;
 
                                     let chosenIns = null;
@@ -11730,7 +11785,7 @@ window.applyWizardSS07Mapping = function(dId) {
                                             subj: c.name,
                                             insId: chosenIns || '',
                                             roomId: chosenRoom || '',
-                                            crn: '',
+                                            crn: chosenCrn, // إسناد الرقم المرجعي الذي تم اختياره
                                             duration: dur,
                                             halfOnly: isHalf ? true : undefined,
                                           cellType: isPhysicsExempt ? 'theory' : ((parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory')  
@@ -11764,7 +11819,11 @@ window.applyWizardSS07Mapping = function(dId) {
         document.getElementById('autoDistWizardModal').style.display = 'none';
         renderDeptTabContent(dId);
         
-        showToastMsg(`✅ اكتمل التوزيع بنجاح! تم ضغط الجدول في الصباح وتصحيح استثناء الفيزياء.`);
+        if (missingCrnsLog.size > 0) {
+            alert("⚠️ اكتمل التوزيع، لكن توجد مقررات لم تحصل على أرقام مرجعية (نقص في السعة أو لم ترفع أرقامها):\n\n" + Array.from(missingCrnsLog).join("\n") + "\n\n(تم دمج الرزم في الأرقام المتاحة حتى امتلأت سعتها)");
+        } else {
+            showToastMsg(`✅ اكتمل التوزيع بنجاح! وتم إسناد الأرقام المرجعية وضغط الأوقات.`);
+        }
 
     } catch (err) {
         alert('حدث خطأ أثناء تنفيذ التوزيع: ' + err.message);
