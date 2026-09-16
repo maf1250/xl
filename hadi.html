@@ -11486,10 +11486,19 @@ window.executeAutoDistribution = function(dId) {
         const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
         let bundleGlobalIdx = 0;
         
+        // إصلاح دالة درع الحماية: الاعتماد على الاسم بدل الفئة للتعرف على الخلايا المبنية مسبقاً
         function isCourseMyResponsibility(c, targetDeptId) {
-            if (dId === 'sup') return c.cat === 'sup'; 
-            if (dId === 'it') return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp'; 
-            return c.cat === 'dept'; 
+            const cName = c.name || c.subj || '';
+            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
+            
+            // إذا كان الخيار مفعلاً وهناك مقرر مستقل مخصص للعملي، نتجاهله
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
+                return false;
+            }
+
+            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
+            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
+            return cCat === 'dept'; 
         }
 
         // قراءة الرزم المطلوبة من الواجهة
@@ -11574,21 +11583,38 @@ window.executeAutoDistribution = function(dId) {
 
                 courses.sort((a,b) => (chByName[b.name]||2) - (chByName[a.name]||2));
 
-            for (let i = 0; i < conf.count; i++) {
-    const bundle = matchingBundles[i];
-    const bGrid = getBundleGrid(bundle.id);
+                for (let i = 0; i < conf.count; i++) {
+                    const bundle = matchingBundles[i];
+                    const bGrid = getBundleGrid(bundle.id);
 
-    // النظام يختار تلقائياً يوم الراحة لكل شعبة بالتناوب العشوائي لضمان التوازن
-    let bundleOffDay = null;
-    if (compress4Days) {
-        bundleOffDay = bundleGlobalIdx % DAYS.length;
-        bundleGlobalIdx++;
-    }
+                    // النظام يختار تلقائياً يوم الراحة لكل شعبة بالتناوب العشوائي لضمان التوازن
+                    let bundleOffDay = null;
+                    if (compress4Days) {
+                        bundleOffDay = bundleGlobalIdx % DAYS.length;
+                        bundleGlobalIdx++;
+                    }
 
-                    // 🛡️ درع الحماية: مسح المقررات التابعة للمستخدم الحالي فقط، والإبقاء على المقررات الأخرى!
+                    // 🛡️ درع الحماية: مسح المقررات التابعة للمستخدم الحالي فقط بدقة!
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
-                        if (cell && isCourseMyResponsibility(cell, targetDeptId)) {
-                            bGrid[di][pi] = null; // يمسح فقط ما هو مسؤول عنه لإعادة توزيعه
+                        if (cell) {
+                            const mainMine = isCourseMyResponsibility(cell, targetDeptId);
+                            const sub2Mine = cell.sub2 ? isCourseMyResponsibility(cell.sub2, targetDeptId) : false;
+
+                            if (mainMine && !sub2Mine && cell.sub2) {
+                                bGrid[di][pi] = {
+                                    subj: cell.sub2.subj,
+                                    insId: cell.sub2.insId,
+                                    roomId: cell.sub2.roomId,
+                                    crn: cell.sub2.crn,
+                                    duration: cell.sub2.duration,
+                                    halfOnly: true,
+                                    cellType: cell.sub2.cellType
+                                };
+                            } else if (!mainMine && sub2Mine) {
+                                delete cell.sub2;
+                            } else if (mainMine) {
+                                bGrid[di][pi] = null;
+                            }
                         }
                     }));
 
@@ -11605,7 +11631,9 @@ window.executeAutoDistribution = function(dId) {
                             cHours = 2;
                         }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
-                        const allowedInsIds = courseInsMap[c.name] || [];
+                        
+                        const uniqueKey = (c.code || c.name).trim();
+                        const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
                         let assignedIns = null; // لتثبيت نفس المدرب لكلا اللقائين
                         const usedDaysForCourse = new Set(); // ⛔ لتتبع الأيام ومنع التكرار في نفس اليوم
@@ -11615,35 +11643,35 @@ window.executeAutoDistribution = function(dId) {
                             const dur = isHalf ? 1 : 2;
                             let placed = false;
                                                     
-// بناء الأيام المرشحة للمحاضرة تلقائياً
-let candidateDays = [];
-if (compress4Days && bundleOffDay !== null) {
-    // 1. الأيام الـ 4 التي اختارها النظام لهذه الشعبة
-    const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay);
-    
-    // فحص الأيام التي لم يُسند إليها هذا المقرر بعد
-    let preferred = preferredDays.filter(d => !usedDaysForCourse.has(d)).sort(() => Math.random() - 0.5);
-    
-    // 2. اليوم الخامس يوضع في نهاية القائمة كملاذ أخير عند التعارض
-    let fallback = (!usedDaysForCourse.has(bundleOffDay)) ? [bundleOffDay] : [];
-    
-    candidateDays = [...preferred, ...fallback];
-} else {
-    // توزيع طبيعي على الـ 5 أيام
-    candidateDays = [...Array(DAYS.length).keys()]
-        .filter(d => !usedDaysForCourse.has(d))
-        .sort(() => Math.random() - 0.5);
-}
+                            // بناء الأيام المرشحة للمحاضرة تلقائياً
+                            let candidateDays = [];
+                            if (compress4Days && bundleOffDay !== null) {
+                                // 1. الأيام الـ 4 التي اختارها النظام لهذه الشعبة
+                                const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay);
+                                
+                                // فحص الأيام التي لم يُسند إليها هذا المقرر بعد
+                                let preferred = preferredDays.filter(d => !usedDaysForCourse.has(d)).sort(() => Math.random() - 0.5);
+                                
+                                // 2. اليوم الخامس يوضع في نهاية القائمة كملاذ أخير عند التعارض
+                                let fallback = (!usedDaysForCourse.has(bundleOffDay)) ? [bundleOffDay] : [];
+                                
+                                candidateDays = [...preferred, ...fallback];
+                            } else {
+                                // توزيع طبيعي على الـ 5 أيام
+                                candidateDays = [...Array(DAYS.length).keys()]
+                                    .filter(d => !usedDaysForCourse.has(d))
+                                    .sort(() => Math.random() - 0.5);
+                            }
 
-// في حال نفاذ الأيام المتاحة للمقرر (حالة نادرة)، نبقي اليوم الخامس كخيار أخير
-if (candidateDays.length === 0) {
-    if (compress4Days && bundleOffDay !== null) {
-        const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay).sort(() => Math.random() - 0.5);
-        candidateDays = [...preferredDays, bundleOffDay];
-    } else {
-        candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
-    }
-}
+                            // في حال نفاذ الأيام المتاحة للمقرر (حالة نادرة)، نبقي اليوم الخامس كخيار أخير
+                            if (candidateDays.length === 0) {
+                                if (compress4Days && bundleOffDay !== null) {
+                                    const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay).sort(() => Math.random() - 0.5);
+                                    candidateDays = [...preferredDays, bundleOffDay];
+                                } else {
+                                    candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
+                                }
+                            }
 
                             const shuffledPeriods = [...Array(P.length).keys()].sort(() => Math.random() - 0.5);
 
