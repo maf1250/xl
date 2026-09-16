@@ -1156,29 +1156,45 @@ function findRoomConflict(dId,entityId,di,pi,roomId){
 // نفس الرقم المرجعي لنفس المقرر في نفس الكيان = مشروع (لقاءان)
 // نفس الرقم لمقرر مختلف أو كيان مختلف = تعارض — يُفحص عبر كل الأقسام لأن مقررات مشتركة (حاسب-101/102)
 // قد يتكرر رقمها المرجعي خطأً بقسم مختلف تمامًا
-function findCrnDuplicate(dId,entityId,di,pi,crn,currentSubj){
-  if(!crn)return null;
-  // البحث عبر جميع الأقسام
+// 💡 فحص تعارض الرقم المرجعي: يمنع استخدام نفس الرقم في مواعيد مختلفة
+function findCrnDuplicate(dId, entityId, di, pi, crn, currentSubj){
+  if(!crn) return null;
+  const crnClean = String(crn).trim();
+
   for(const dept of getDepts()){
+    // 1. فحص الشُعب العادية
     for(const s of getSections(dept.id)){
-      const g=getGrid(s.id);
-      for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){
-        if(s.id===entityId&&d===di&&p===pi)continue;
-        const cell=g[d]&&g[d][p];
-        if(!cell||cell.crn!==crn)continue;
-        // إذا كان نفس المقرر، فالمشاركة مسموحة وليست تعارضاً
-        if(cell.subj===currentSubj)continue;
-        return {name:s.name};
+      const g = getGrid(s.id);
+      for(let d = 0; d < g.length; d++){
+        for(let p = 0; p < (g[d] || []).length; p++){
+          if(s.id === entityId && d === di && p === pi) continue;
+          const cell = g[d] && g[d][p];
+          if(!cell || !cell.crn || String(cell.crn).trim() !== crnClean) continue;
+          
+          // إذا كان نفس الرقم المرجعي ولكن في (يوم مختلف) أو (حصة مختلفة) = تعارض قطعي
+          if(d !== di || p !== pi){
+            return { name: `${s.name} في موعد مختلف (${DAYS[d]} م${p+1})` };
+          }
+        }
       }
     }
+    // 2. فحص الرزم
     for(const b of getBundles(dept.id)){
-      const g=getBundleGrid(b.id);
-      for(let d=0;d<g.length;d++)for(let p=0;p<(g[d]||[]).length;p++){
-        if(b.id===entityId&&d===di&&p===pi)continue;
-        const cell=g[d]&&g[d][p];
-        if(!cell||cell.crn!==crn)continue;
-        if(cell.subj===currentSubj)continue;
-        return {name:b.name};
+      const g = getBundleGrid(b.id);
+      for(let d = 0; d < g.length; d++){
+        for(let p = 0; p < (g[d] || []).length; p++){
+          if(b.id === entityId && d === di && p === pi) continue;
+          const cell = g[d] && g[d][p];
+          if(!cell || !cell.crn || String(cell.crn).trim() !== crnClean) continue;
+
+          // إذا كان في نفس الرزمة (اللقاء الثاني) نسمح به طبعاً
+          if(b.id === entityId) continue;
+
+          // إذا كان لرزمة أخرى وفي موعد مختلف = تعارض قطعي
+          if(d !== di || p !== pi){
+            return { name: `رزمة [${b.name}] في موعد مختلف (${DAYS[d]} م${p+1})` };
+          }
+        }
       }
     }
   }
@@ -1895,8 +1911,13 @@ function _checkAnyConflict(){
   const msgs=[];
   if(insId&&insId!=='__new__'){const c=findConflict(dId,entityId,di,pi,insId);if(c)msgs.push('⚠️ تعارض مدرّب مع: <strong>'+esc(c.name)+'</strong>');}
   if(roomId&&roomId!=='__newroom__'){const c=findRoomConflict(dId,entityId,di,pi,roomId);if(c)msgs.push('⛔ القاعة محجوزة بنفس الوقت في: <strong>'+esc(c.name)+'</strong>'+(c.subj?' — '+esc(c.subj):'')+(c.deptName&&c.deptId!==dId?' <span style="font-weight:700">(قسم '+esc(c.deptName)+')</span>':''));}
-  if(crn){const c=findCrnDuplicate(dId,entityId,di,pi,crn,currentSubj);if(c)msgs.push('⚠️ الرقم المرجعي '+esc(crn)+' مستخدم في: <strong>'+esc(c.name)+'</strong>');}
-  if(msgs.length){box.style.display='block';box.innerHTML=msgs.join('<br/>');}else box.style.display='none';
+if(crn){
+    const dup = findCrnDuplicate(ctx.deptId, ctx.sectionId || ctx.bundleId, ctx.di, ctx.pi, crn, subj);
+    if(dup){
+      showToastMsg('⛔ خطأ في الرقم المرجعي: الرقم (' + crn + ') مستخدم مسبقاً في: ' + dup.name + '. يجب أن يكون لنفس الرقم موعد موحد تماماً!');
+      return;
+    }
+  }  if(msgs.length){box.style.display='block';box.innerHTML=msgs.join('<br/>');}else box.style.display='none';
   updateCrnLinkBox(dId,crn);
 }
 
@@ -2084,21 +2105,94 @@ function checkCopySessionSuggestion(dId,crn){
     ${notes.length?'<div style="margin-top:4px;font-weight:700">'+notes.join(' · ')+'</div>':''}
   </div>`;
 }
-function populateCrnChips(dId,subjName,specId,level,currentCrn){
-  const el=document.getElementById('cm-crn-chips');if(!el)return;
-  if(!subjName){el.innerHTML='';return;}
-  const all=getSections(dId).filter(s=>s.crn&&s.name===subjName);
-  const filtered=all.filter(s=>(!specId||s.specId===specId)&&(!level||s.level===level));
-  const display=filtered.length?filtered:all;
-  // استبعد الأرقام المستخدمة فعلاً في خلايا أخرى من الجدول (ما عدا رقم الخلية الحالية)
-  const usedCrns=new Set();
-  getDepts().forEach(d=>{
-    getSections(d.id).forEach(s=>getGrid(s.id).forEach(day=>day.forEach(cell=>{if(cell&&cell.crn&&cell.crn!==currentCrn)usedCrns.add(cell.crn);})));
-    getBundles(d.id).forEach(b=>getBundleGrid(b.id).forEach(day=>day.forEach(cell=>{if(cell&&cell.crn&&cell.crn!==currentCrn)usedCrns.add(cell.crn);})));
+// 💡 إظهار خيارات الأرقام المرجعية داخل نافذة تعيين المحاضرة (مع دعم السعة والبحث الشامل)
+function populateCrnChips(dId, subjName, specId, level, currentCrn){
+  const el = document.getElementById('cm-crn-chips');
+  if(!el) return;
+  if(!subjName){ el.innerHTML = ''; return; }
+
+  // 1. استخراج رمز المقرر المطلوب من الخطة المعتمدة
+  let targetCode = '';
+  getDepts().forEach(d => {
+    getSpecs(d.id).forEach(sp => {
+      const found = getPlan(d.id, sp.id).find(c => c.name === subjName);
+      if (found && found.code) targetCode = found.code;
+    });
   });
-  const available=display.filter(s=>!usedCrns.has(s.crn)||s.crn===currentCrn);
-  if(!available.length){el.innerHTML='<span style="font-size:10px;color:var(--mu)">لا توجد أرقام مرجعية متاحة (جميعها مستخدمة)</span>';return;}
-  el.innerHTML='<span style="font-size:10px;color:var(--mu);display:block;margin-bottom:3px">اختر:</span>'+available.map(s=>`<button type="button" onclick="selectCrnChip('${esc(s.crn)}')" class="crn-chip-btn">${esc(s.crn)}</button>`).join('');
+
+  const targetCodeNorm = targetCode ? normCode(targetCode) : '';
+  const targetNameNorm = normName(subjName);
+
+  // 2. البحث في شُعب الكلية بالكامل (لضمان جلب شعب الدراسات العامة والحاسب)
+  const allCollegeSections = [];
+  getDepts().forEach(d => {
+    getSections(d.id).forEach(s => allCollegeSections.push(s));
+  });
+
+  // 3. جلب خريطة السعة المستهلكة
+  const crnUsageMap = typeof getCrnUsageMapAllDepts === 'function' ? getCrnUsageMapAllDepts() : {};
+  const currentBundleStudents = (currentBundleCell && currentBundleCell.bundleId) 
+    ? (Number((getBundles(dId).find(b => b.id === currentBundleCell.bundleId) || {}).students) || 20) 
+    : 20;
+
+  // 4. تصفية الشُعب المطابقة بالرمز الصريح أو الاسم
+  const matchedSections = allCollegeSections.filter(s => {
+    if (!s.crn) return false;
+    const sCodeNorm = s.code ? normCode(s.code) : '';
+    const sNameNorm = normName(s.name);
+
+    let isMatch = false;
+    if (targetCodeNorm) {
+      if (sCodeNorm) {
+        isMatch = (sCodeNorm === targetCodeNorm);
+      } else if (s.name) {
+        const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
+        if (m) isMatch = (normCode(m[1]) === targetCodeNorm);
+      }
+    } else {
+      isMatch = (sNameNorm === targetNameNorm);
+    }
+
+    if (!isMatch) return false;
+
+    // فحص السعة المتبقية
+    const crnClean = String(s.crn).trim();
+    if (crnClean === currentCrn) return true; // إذا كان هو الرقم المحدد حالياً نظهره دائماً
+
+    const maxCap = Number(s.capacity) || 40;
+    const usage = crnUsageMap[crnClean] || { usedSeats: 0, bundleIds: new Set() };
+    const freeSeats = maxCap - usage.usedSeats;
+
+    return freeSeats >= currentBundleStudents;
+  });
+
+  if(!matchedSections.length){
+    el.innerHTML = '<span style="font-size:10px;color:var(--mu)">لا توجد أرقام مرجعية بسعة متاحة لهذا المقرر</span>';
+    return;
+  }
+
+  // إزالة التكرار إن وجد
+  const seenCrns = new Set();
+  const uniqueSecs = matchedSections.filter(s => {
+    const c = String(s.crn).trim();
+    if(seenCrns.has(c)) return false;
+    seenCrns.add(c);
+    return true;
+  });
+
+  // 5. رسم الأزرار مع بيان السعة المتبقية
+  el.innerHTML = '<span style="font-size:10px;color:var(--mu);display:block;margin-bottom:3px">اختر من الأرقام المتاحة:</span>' + 
+    uniqueSecs.map(s => {
+      const crnClean = String(s.crn).trim();
+      const maxCap = Number(s.capacity) || 40;
+      const usage = crnUsageMap[crnClean] || { usedSeats: 0 };
+      const freeSeats = Math.max(0, maxCap - usage.usedSeats);
+      const isSelected = (crnClean === currentCrn);
+
+      return `<button type="button" onclick="selectCrnChip('${esc(crnClean)}')" class="crn-chip-btn ${isSelected ? 'crn-chip-selected' : ''}" title="السعة: ${maxCap} | المتبقي: ${freeSeats}">
+        ${esc(crnClean)} <small style="font-size:9px;opacity:.8">(${freeSeats})</small>
+      </button>`;
+    }).join('');
 }
 function selectCrnChip(crn){const inp=document.getElementById('cm-crn');if(inp){inp.value=crn;}document.querySelectorAll('.crn-chip-btn').forEach(b=>{b.classList.toggle('crn-chip-selected',b.textContent===crn);});_checkAnyConflict();}
 let pendingCourseType=null;
@@ -3910,7 +4004,7 @@ const legendRows = (() => {
           return freeSeats >= currentBundleStudents;
       });
 
-      const crnChips = allLinked.map(s => {
+    const crnChips = allLinked.map(s => {
         const crnClean = String(s.crn).trim();
         const maxCap = Number(s.capacity) || 40;
         const usage = crnUsageMap[crnClean] || { usedSeats: 0, bundleIds: new Set() };
@@ -3919,13 +4013,28 @@ const legendRows = (() => {
 
         const linkedCrn = getLinkedCrn(s._dId || deptId, s.crn);
         const linkBadge = linkedCrn ? `<span style="font-size:8px;background:#ede9fe;color:#6d28d9;border-radius:3px;padding:0 3px;margin-right:2px" title="مرتبط بـ ${esc(linkedCrn)}">🔗${esc(linkedCrn)}</span>` : '';
-        const resolved = resolveCrnType(s._dId || deptId, s.crn);
-        const chipStyle = resolved.type ? `style="color:${cellTypeColor(resolved.type)};border-color:${cellTypeColor(resolved.type)}"` : '';
         
-        // شارة توضح المقاعد المتبقية إذا كان الرقم مشتركاً
-        const capBadge = isShared ? `<span style="font-size:8px;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 3px;margin-right:3px">متبقي:${freeSeats}</span>` : '';
+        // 💡 استخراج نوع المحاضرة وتحديد ألوان واضحة جداً للخلفية والحدود والنص
+        const resolved = resolveCrnType(s._dId || deptId, s.crn);
+        let chipBg = '#f1f5f9', chipBorder = '#cbd5e1', chipText = '#475569';
 
-        return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${s._dId || deptId}')" ${chipStyle} title="السعة الكلية: ${maxCap} | المستهلك: ${usage.usedSeats} | المتبقي: ${freeSeats}">🔢 ${esc(s.crn)}${capBadge}${linkBadge}</span>`;
+        if (resolved.type === 'theory') {
+          chipBg = '#dcfce7'; chipBorder = '#22c55e'; chipText = '#15803d'; // أخضر للنظري
+        } else if (resolved.type === 'practical') {
+          chipBg = '#fee2e2'; chipBorder = '#ef4444'; chipText = '#b91c1c'; // أحمر للعملي
+        } else if (resolved.type === 'remote') {
+          chipBg = '#dbeafe'; chipBorder = '#3b82f6'; chipText = '#1d4ed8'; // أزرق لعن بُعد
+        } else if (resolved.type === 'blended') {
+          chipBg = '#fef3c7'; chipBorder = '#eab308'; chipText = '#a16207'; // أصفر للمدمج
+        } else if (resolved.type === 'selfstudy') {
+          chipBg = '#ffedd5'; chipBorder = '#f97316'; chipText = '#c2410c'; // برتقالي للذاتي
+        }
+
+        const chipStyle = `background:${chipBg} !important; border:1.5px solid ${chipBorder} !important; color:${chipText} !important;`;
+        const capBadge = isShared ? `<span style="font-size:8px;background:rgba(0,0,0,0.08);color:inherit;border-radius:3px;padding:0 3px;margin-right:3px;font-weight:normal">متبقي:${freeSeats}</span>` : '';
+        const typeTitle = resolved.type ? `نوع المحاضرة: ${cellTypeLabel(resolved.type)} | ` : '';
+
+        return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${s._dId || deptId}')" style="${chipStyle}" title="${typeTitle}السعة: ${maxCap} | المتبقي: ${freeSeats}">🔢 ${esc(s.crn)}${capBadge}${linkBadge}</span>`;
       }).join('');
 
       const canManageCourse = canUserManageCourse(c.name, c.cat, bundle.deptId || deptId);
@@ -6521,15 +6630,23 @@ function findCellTypeByCrn(deptId,crn){
   }
   return null;
 }
-// يحدد أفضل نوع معروف لرقم مرجعي: يفضّل ملف Banner المرفوع (مصدر رسمي موثّق)، وإلا يرجع لما هو
-// مضبوط فعلياً بالجدول نفسه (نافذة تعيين المحاضرة)
-function resolveCrnType(deptId,crn){
-  if(!crn)return {type:null,source:null};
-  const typeMap=ls('pq_crn_type_map_'+deptId,null);
-  if(typeMap&&typeMap[crn])return {type:typeMap[crn].cellType,source:'banner'};
-  const scheduleType=findCellTypeByCrn(deptId,crn);
-  if(scheduleType)return {type:scheduleType,source:'schedule'};
-  return {type:null,source:null};
+function resolveCrnType(deptId, crn){
+  if(!crn) return {type:null, source:null};
+  const crnClean = String(crn).trim();
+
+  // 1. البحث في خرائط رايات المحفوظة لكل الأقسام
+  for (const d of getDepts()) {
+    const typeMap = ls('pq_crn_type_map_' + d.id, null);
+    if (typeMap && typeMap[crnClean] && typeMap[crnClean].cellType) {
+      return { type: typeMap[crnClean].cellType, source: 'banner' };
+    }
+  }
+
+  // 2. البحث في الجداول المجدولة فعلياً
+  const scheduleType = findCellTypeByCrn(deptId, crnClean);
+  if (scheduleType) return { type: scheduleType, source: 'schedule' };
+
+  return { type: null, source: null };
 }
 function formatTimeCompact(t){
   if(!t)return '';
@@ -12555,16 +12672,26 @@ window.executeAutoDistribution = function(dId) {
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
 
-                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                      const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
 
                         if (availableCrnList && availableCrnList.length > 0) {
-                            let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
+                            // 💡 1. الأولوية القصوى: اختيار رقم جديد كلياً لم يُستخدم في أي رزمة سابقة (used === 0)
+                            // لضمان استقلال مواعيد وأوقات كل رزمة عن الأخرى
+                            let crnObj = availableCrnList.find(x => x.used === 0 && x.cap >= bStudents);
+
+                            // 2. إذا لم يتوفر رقم جديد وكانت الأرقام محدودة، نبحث عن رقم يتسع بالسعة
                             if (!crnObj) {
-                                crnObj = availableCrnList[0]; // استيعاب في أول رقم متاح إذا امتلأت السعة
+                                crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
                             }
+
+                            // 3. كحل أخير إذا نفدت كل المقاعد في كل الأرقام
+                            if (!crnObj) {
+                                crnObj = availableCrnList[0];
+                            }
+
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // خصم السعة للرزمة
+                                crnObj.used += bStudents; // خصم مقاعد الرزمة من سعة الشعبة
                             }
                         } else {
                             missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
