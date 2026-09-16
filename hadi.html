@@ -1522,7 +1522,7 @@ function processSectionListCSV(dId,text){
     if(match){courseName=match.course.name;specId=match.spec.id;level=match.course.level;}
     if(secs.find(s=>s.name===courseName&&s.crn===crn))return;
     let sec=secs.find(s=>s.name===courseName&&!s.crn);
-    if(sec){sec.crn=crn;}else{secs.push({id:genId(),name:courseName,crn,specId,level,capacity:DEFAULT_CAPACITY});}
+    if(sec){sec.crn=crn;}else{secs.push({id:genId(),name:courseName,code:code,crn,specId,level,capacity:DEFAULT_CAPACITY});}
     // التقط نوع المحاضرة (نظري/عملي/عن بُعد) من نفس الملف — يفضّل "نوع الجدولة"، وإلا "نوع الشعبة"
     const rawType=iSchedType>-1?String(r[iSchedType]||''):(iSectionType>-1?String(r[iSectionType]||''):'');
     const cellType=normalizeBannerSectionType(rawType);
@@ -4425,9 +4425,16 @@ function plansHTML(deptId){
           ${canUpload ? `<button type="button" class="bdng" style="font-size:11px;padding:4px 10px" onclick="deleteSpec('${deptId}','${spec.id}')">🗑️ حذف التخصص</button>` : ''}
         </div>`;
       
-      const supInPlan = (deptId !== 'sup' && deptId !== 'it') ? plan.filter(c => c.cat === 'sup' || c.cat === 'comp') : [];
-      html += supInPlan.length ? `<div style="background:#fef3c7;border:1px solid #fde047;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#854d0e">⚠️ يحتوي على ${supInPlan.length} مقرر(ات) تخدمها أقسام أخرى (دراسات عامة / حاسب).</div>` : '';
-      
+      // حساب المقررات الخارجية: لقسم الحاسب تُحسب الدراسات العامة فقط، ولبقية الأقسام تُحسب الدراسات العامة والحاسب معاً
+const supInPlan = (deptId === 'it')
+  ? plan.filter(c => c.cat === 'sup')
+  : (deptId !== 'sup')
+  ? plan.filter(c => c.cat === 'sup' || c.cat === 'comp')
+  : [];
+
+const otherDeptsLabel = (deptId === 'it') ? 'دراسات عامة' : 'دراسات عامة / حاسب';
+
+html += supInPlan.length ? `<div style="background:#fef3c7;border:1px solid #fde047;border-radius:6px;padding:6px 10px;margin-bottom:8px;font-size:11px;color:#854d0e">⚠️ يحتوي على ${supInPlan.length} مقرر(ات) تخدمها أقسام أخرى (${otherDeptsLabel}).</div>` : '';      
       PLAN_LEVELS.forEach(level => {
         const courses = plan.filter(c => c.level === level);
         if(!courses.length) return;
@@ -12059,7 +12066,7 @@ window.executeAutoDistribution = function(dId) {
             return cCat === 'dept'; 
         }
 
-        // 💡 2. قراءة وإرفاق "سعة الرزمة" مع المتغيرات
+        // 1. قراءة وإرفاق "سعة الرزمة" من المدخلات
         const levelsConfig = [];
         document.querySelectorAll('.wiz-level-input').forEach(inp => {
             const count = parseInt(inp.value) || 0;
@@ -12110,15 +12117,75 @@ window.executeAutoDistribution = function(dId) {
 
         const missingCrnsLog = new Set(); 
 
+        // دوال تطبيع الرموز والأسماء
+        const normCode = s => (s || '')
+            .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .trim()
+            .toUpperCase();
+
+        const normName = s => (s || '')
+            .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/[يى]/g, 'ي')
+            .trim();
+
+        // بناء خريطة استنتاج الرمز من الخطط المعتمدة للشعب التي لا تملك رمزاً مسجلاً
+        const courseNameToCodeMap = {};
+        getDepts().forEach(d => {
+            getSpecs(d.id).forEach(sp => {
+                getPlan(d.id, sp.id).forEach(c => {
+                    if (c.name && c.code) {
+                        const nKey = normName(c.name);
+                        if (!courseNameToCodeMap[nKey]) courseNameToCodeMap[nKey] = normCode(c.code);
+                    }
+                });
+            });
+        });
+
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             const targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
             const crnBank = {}; 
-            getSections(targetDeptId).forEach(s => {
-                if (s.crn && s.name) {
-                    if (!crnBank[s.name]) crnBank[s.name] = [];
-                    if (!crnBank[s.name].find(x => x.crn === s.crn)) crnBank[s.name].push({ crn: s.crn, cap: s.capacity || 40, used: 0 });
+            
+            // مسح الشعب من القسم التخصصي وقسم الخدمة (الدراسات العامة / الحاسب)
+            const sectionsToScan = [
+                ...getSections(targetDeptId),
+                ...(dId !== targetDeptId ? getSections(dId) : [])
+            ];
+
+            sectionsToScan.forEach(s => {
+                if (s.crn) {
+                    let codeKey = s.code ? normCode(s.code) : '';
+                    
+                    // محاولة استخراج الرمز من الاسم إذا كان مكتوباً داخله (مثل انجل-111)
+                    if (!codeKey && s.name) {
+                        const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?\d{3})/);
+                        if (m) codeKey = normCode(m[1]);
+                    }
+
+                    // محاولة معرفة الرمز من قاعدة بيانات الخطط المعتمدة بواسطة اسم المقرر
+                    if (!codeKey && s.name) {
+                        const mappedCode = courseNameToCodeMap[normName(s.name)];
+                        if (mappedCode) codeKey = mappedCode;
+                    }
+
+                    // التسجيل بالرمز أولاً كأولوية قصوى
+                    if (codeKey) {
+                        if (!crnBank[codeKey]) crnBank[codeKey] = [];
+                        if (!crnBank[codeKey].find(x => x.crn === s.crn)) {
+                            crnBank[codeKey].push({ crn: s.crn, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey, rawName: s.name });
+                        }
+                    } else if (s.name) {
+                        // حل احتياطي للشعب النادرة التي لا يُعرف رمزها
+                        const nameKey = 'NAME_' + normName(s.name);
+                        if (!crnBank[nameKey]) crnBank[nameKey] = [];
+                        if (!crnBank[nameKey].find(x => x.crn === s.crn)) {
+                            crnBank[nameKey].push({ crn: s.crn, cap: s.capacity || 40, used: 0, rawCode: '', rawName: s.name });
+                        }
+                    }
                 }
             });
 
@@ -12131,14 +12198,13 @@ window.executeAutoDistribution = function(dId) {
                 for (let i = matchingBundles.length; i < conf.count; i++) {
                     const bId = genId();
                     const bName = `شعبة ${i + 1}`;
-                    // 💡 3. تطبيق הסعة (عدد الطلاب) عند إنشاء الرزمة
                     const newB = { id: bId, name: bName, specId: conf.specId, level: conf.level, deptId: targetDeptId, students: conf.capacity };
                     targetDeptBundles.push(newB);
                     matchingBundles.push(newB);
                     saveBundleGrid(bId, emptyGrid());
                 }
 
-                // 💡 تحديث السعة للرزم القديمة إذا شغّل المستخدم المعالج مرة أخرى
+                // تحديث السعة
                 matchingBundles.forEach(b => {
                     b.students = conf.capacity;
                 });
@@ -12148,7 +12214,7 @@ window.executeAutoDistribution = function(dId) {
                 
                 const uniqueCoursesMap = new Map();
                 rawCourses.forEach(c => {
-                    const key = (c.name).trim(); 
+                    const key = (c.code || c.name).trim(); 
                     if (!uniqueCoursesMap.has(key)) uniqueCoursesMap.set(key, c);
                 });
                 const courses = Array.from(uniqueCoursesMap.values());
@@ -12159,7 +12225,7 @@ window.executeAutoDistribution = function(dId) {
                 for (let i = 0; i < conf.count; i++) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
-                    const bStudents = bundle.students || conf.capacity || 20; // 💡 4. استخدام السعة الجديدة
+                    const bStudents = bundle.students || conf.capacity || 20;
                     const fullBundleContext = `${bundle.name} (${targetDeptName}) ${sp.name} / ${conf.level}`;
 
                     let bundleOffDay = null;
@@ -12180,34 +12246,48 @@ window.executeAutoDistribution = function(dId) {
                     }));
 
                     const getDayLoad = (dayIndex) => { let load = 0; bGrid[dayIndex].forEach(cell => { if (cell && cell.subj) load++; }); return load; };
-                    const getCoursePlacedCount = (cName) => { let cnt = 0; bGrid.forEach(day => day.forEach(cell => { if (cell && cell.subj === cName) cnt++; if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++; })); return cnt; };
+                    const getCoursePlacedCount = (cCode, cName) => { 
+                        let cnt = 0; 
+                        bGrid.forEach(day => day.forEach(cell => { 
+                            if (cell && (cell.code === cCode || cell.subj === cName)) cnt++; 
+                            if (cell && cell.sub2 && (cell.sub2.code === cCode || cell.sub2.subj === cName)) cnt++; 
+                        })); 
+                        return cnt; 
+                    };
 
-                   courses.forEach(c => {
+                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
                         if (isPhysicsExempt) { sessionsNeeded = 1; cHours = 2; }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         
-                        let currentPlaced = getCoursePlacedCount(c.name);
+                        let currentPlaced = getCoursePlacedCount(c.code, c.name);
                         if (currentPlaced >= sessionsNeeded) return;
                         
                         const sessionsToPlace = sessionsNeeded - currentPlaced;
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
+                        // اختيار الرقم المرجعي المطابق للرمز
                         let chosenCrn = '';
-                        if (crnBank[c.name]) {
-                            // 💡 5. البحث عن رقم مرجعي يسع عدد الطلاب الموجود بالرزمة
-                            let crnObj = crnBank[c.name].find(x => (x.cap - x.used) >= bStudents);
+                        const targetCodeKey = normCode(c.code);
+                        const targetNameKey = 'NAME_' + normName(c.name);
+
+                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) 
+                            ? crnBank[targetCodeKey] 
+                            : (crnBank[targetNameKey] || null);
+
+                        if (availableCrnList) {
+                            let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // خصم السعة بذكاء!
+                                crnObj.used += bStudents; // خصم السعة
                             } else {
-                                missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا توجد سعة كافية لـ ${bStudents} متدرب في الأرقام المرجعية המتاحة.`);
+                                missingCrnsLog.add(`- ${c.name} [رمز: ${c.code || 'غير محدد'}] في [${fullBundleContext}]: الأرقام المرجعية المتاحة استُهلكت سعتها بالكامل.`);
                             }
                         } else {
-                            missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا توجد أرقام مرجعية مسجلة للمادة أصلاً.`);
+                            missingCrnsLog.add(`- ${c.name} [رمز: ${c.code || 'غير محدد'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر.`);
                         }
 
                         let assignedIns = null; 
@@ -12271,8 +12351,9 @@ window.executeAutoDistribution = function(dId) {
                                     }
 
                                     if (chosenIns || allowedInsIds.length === 0) {
-                                       bGrid[di][pi] = {
+                                        bGrid[di][pi] = {
                                             subj: c.name,
+                                            code: c.code || '',
                                             insId: chosenIns || '',
                                             roomId: chosenRoom || '',
                                             crn: chosenCrn, 
@@ -12317,27 +12398,27 @@ window.executeAutoDistribution = function(dId) {
             <div class="modal-overlay open" id="crnMissingModal" style="z-index: 10000; align-items: center; justify-content: center; display: flex;">
                 <div class="modal" style="max-width: 650px; direction: rtl; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
                     <div class="modal-head" style="background: linear-gradient(135deg, #d97706, #b45309);">
-                        <h2 style="display:flex; align-items:center; gap:8px;">⚠️ تنبيه: نقص في الأرقام المرجعية</h2>
+                        <h2 style="display:flex; align-items:center; gap:8px;">⚠️ تنبيه: تقرير إسناد الأرقام المرجعية</h2>
                         <button class="modal-close" onclick="document.getElementById('crnMissingModal').remove()">✕</button>
                     </div>
                     <div class="modal-body">
                         <p style="font-size:13px; color:var(--tx); margin-bottom:12px; font-weight:bold;">
-                            ✅ اكتمل التوزيع التلقائي بنجاح، لكن توجد مقررات لم تحصل على أرقام مرجعية بسبب نقص السعة (حسب سعة الرزمة) أو لعدم توفر أرقام لها:
+                            ✅ تم التوزيع التلقائي بدقة حسب الرموز، ووجدت الملاحظات التالية على الأرقام المرجعية:
                         </p>
                         <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; max-height:280px; overflow-y:auto; margin-bottom:12px; font-size:12px; color:#92400e; line-height:1.6;">
                             ${logHtml}
                         </div>
                         <div style="font-size:11px; color:#b45309; background:#ffedd5; padding:8px; border-radius:6px; margin-bottom:16px;">
-                            💡 <b>ملاحظة:</b> تم دمج الرزم في الأرقام المتاحة التي تكفي سعتها. يرجى مراجعة الأرقام المرجعية لهذه المقررات وتزويد النظام بأرقام إضافية.
+                            💡 <b>ملاحظة:</b> تم حفظ كل مقرر برمز الخطة المعتمدة حصراً لمنع تداخل أرقام المقررات المتشابهة في المسميات.
                         </div>
                         <button class="bpri" style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); border:none; padding:12px; font-size:14px;" onclick="document.getElementById('crnMissingModal').remove()">حسناً، فهمت</button>
                     </div>
                 </div>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            showToastMsg(`✅ اكتمل التوزيع مع وجود ملاحظات على سعة الأرقام المرجعية.`);
+            showToastMsg(`✅ اكتمل التوزيع مع التحقق من الرموز بدقة.`);
         } else {
-            showToastMsg(`✅ اكتمل التوزيع بنجاح! وتم إسناد الأرقام المرجعية وضغط الأوقات.`);
+            showToastMsg(`✅ اكتمل التوزيع بنجاح! تم إسناد الأرقام المرجعية المطابقة للرموز.`);
         }
 
     } catch (err) {
