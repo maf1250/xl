@@ -519,6 +519,14 @@ const getAllowSupEdit = () => ls('pq_allow_sup_edit', false);
 const setAllowSupEdit = (v) => ss('pq_allow_sup_edit', v);
 const getAllowSupEditComp = () => ls('pq_allow_sup_edit_comp', false);
 const setAllowSupEditComp = (v) => ss('pq_allow_sup_edit_comp', v);
+const getExemptPhysicsPractical = () => ls('pq_exempt_physics_practical', false);
+const setExemptPhysicsPractical = (v) => ss('pq_exempt_physics_practical', v);
+
+function isPhysicsCourse(name, code) {
+  const n = (name || '').replace(/[\u064B-\u0652\u0670]/g, '').trim();
+  const c = (code || '').trim();
+  return /فيزياء|فيزيا/.test(n) || /^(فيز|phys)/i.test(c);
+}
 
 // ══ CONFIG ══
 const DAYS=['أحد','اثنين','ثلاثاء','أربعاء','خميس'];
@@ -906,25 +914,26 @@ function bundleLevelCourses(dId,specId,level){
 }
 // حساب اللقاءات الأسبوعية المطلوبة من الخطة
 function sessionsNeeded(course){
+  if(getExemptPhysicsPractical() && isPhysicsCourse(course.name, course.code)) return 1;
   const ch=parseInt(course.ch)||parseInt(course.total)||0;
   const mh=parseInt(course.mh)||parseInt(course.lecture)||0;
   const am=parseInt(course.am)||parseInt(course.practical)||0;
   const tm=parseInt(course.tm)||parseInt(course.training)||0;
   const total=ch||(mh+am+tm);
-  // كل لقاء = ساعتان
   return total>0?Math.ceil(total/2):1;
 }
-// اللقاءات النظرية المطلوبة (مح+تم ÷ 2)
 function theorySessionsNeeded(course){
+  if(getExemptPhysicsPractical() && isPhysicsCourse(course.name, course.code)) return 1;
   const mh=parseInt(course.mh)||parseInt(course.lecture)||0;
   const tm=parseInt(course.tm)||parseInt(course.training)||0;
   return mh+tm>0?Math.ceil((mh+tm)/2):0;
 }
-// اللقاءات العملية المطلوبة (عم ÷ 2)
 function practSessionsNeeded(course){
+  if(getExemptPhysicsPractical() && isPhysicsCourse(course.name, course.code)) return 0;
   const am=parseInt(course.am)||parseInt(course.practical)||0;
   return am>0?Math.ceil(am/2):0;
 }
+
 function sessionsScheduled(bundleId,courseName){
   let n=0;getBundleGrid(bundleId).forEach(d=>d.forEach(c=>{if(c&&c.subj===courseName)n++;}));return n;
 }
@@ -3532,7 +3541,8 @@ function renderBundleGrid(deptId,bundle,editable){
       ?`<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">💻 حاسب</span>`:'';
 
     // تفاصيل النظري والعملي
-    const am=parseInt(c.am)||parseInt(c.practical)||0;
+    let am=parseInt(c.am)||parseInt(c.practical)||0;
+    if(getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) am = 0;
     const theoryHrs=(parseInt(c.mh)||parseInt(c.lecture)||0)+(parseInt(c.tm)||parseInt(c.training)||0);
     const capT=c.capTheory||40;
     const capP=c.capPract||20;
@@ -5614,6 +5624,10 @@ function deptsSettingsHTML(){
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#166534">
         <input type="checkbox" ${allowSupComp ? 'checked' : ''} onchange="setAllowSupEditComp(this.checked); showToastMsg('✅ تم تحديث الصلاحية');" style="width:16px;height:16px"/>
         السماح لرئيس قسم الدراسات العامة بتعديل مقررات الحاسب المشتركة (حاسب-101 وحاسب-102)
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;color:#166534">
+        <input type="checkbox" ${getExemptPhysicsPractical() ? 'checked' : ''} onchange="setExemptPhysicsPractical(this.checked); showToastMsg('✅ تم تحديث إعداد مقرر الفيزياء');" style="width:16px;height:16px"/>
+        استثناء مقرر الفيزياء من الشق العملي (معاملته كلقاء واحد نظري فقط)
       </label>
     </div>
   </div>` : '';
@@ -11571,8 +11585,13 @@ window.executeAutoDistribution = function(dId) {
                     }));
 
                    courses.forEach(c => {
-                        const sessionsNeeded = c.sessions || 2;
-                        const cHours = chByName[c.name] || 2;
+                        let sessionsNeeded = c.sessions || 2;
+                        let cHours = chByName[c.name] || 2;
+                        let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
+                        if (isPhysicsExempt) {
+                            sessionsNeeded = 1;
+                            cHours = 2;
+                        }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         const allowedInsIds = courseInsMap[c.name] || [];
                         
@@ -11653,7 +11672,7 @@ if (candidateDays.length === 0) {
                                             crn: '',
                                             duration: dur,
                                             halfOnly: isHalf ? true : undefined,
-                                            cellType: (parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory'
+                                            cellType: isPhysicsExempt ? 'theory' : ((parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory')
                                         };
 
                                         if (chosenIns) {
