@@ -1542,34 +1542,47 @@ function processSectionListCSV(dId, text){
   if(rows.length < 2) return;
   const header = rows[0].map(h => String(h == null ? '' : h).trim());
   
-  // عمود الرمز في رايات غالباً اسمه "المقرر"
+  // عمود الرمز في ملف SS01 الذي أرفقته اسمه حرفياً "المقرر"
   const iCode = header.indexOf('المقرر');
   const iName = findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
   const iCrn = header.indexOf('الرقم المرجعي');
   const iSectionType = findColIndex(header, ['نوع الشعبة', 'نوع التدريب']);
   const iSchedType = header.indexOf('نوع الجدولة');
   
-  if(iName === -1 || iCrn === -1) return;
+  if(iCrn === -1) return;
   let secs = getSections(dId);
   const typeMap = ls('pq_crn_type_map_'+dId, {});
   let typeMapChanged = false;
 
   rows.slice(1).forEach(r => {
     const code = iCode > -1 ? String(r[iCode] == null ? '' : r[iCode]).trim() : '';
-    const desc = String(r[iName] == null ? '' : r[iName]).trim();
+    const desc = iName > -1 ? String(r[iName] == null ? '' : r[iName]).trim() : (code || 'مقرر');
     const crn = String(r[iCrn] == null ? '' : r[iCrn]).trim();
-    if(!crn || !desc) return;
+    if(!crn) return;
 
     let courseName = desc, specId = '', level = '';
     const match = findPlanCourse(dId, code);
-    if(match){ courseName = match.course.name; specId = match.spec.id; level = match.course.level; }
+    if(match){ 
+      courseName = match.course.name; 
+      specId = match.spec.id; 
+      level = match.course.level; 
+    }
 
-    let sec = secs.find(s => s.crn === crn || (s.name === courseName && !s.crn));
+    // البحث عن الشعبة بالرقم المرجعي أو بالرمز الموحد
+    let sec = secs.find(s => s.crn === crn || (s.code && code && s.code === code && !s.crn));
     if(sec){
        sec.crn = crn;
        if(code) sec.code = code;
     } else {
-       secs.push({ id: genId(), name: courseName, code: code || '', crn, specId, level, capacity: DEFAULT_CAPACITY });
+       secs.push({ 
+         id: genId(), 
+         name: courseName, 
+         code: code || '', // 💡 حفظ الرمز الحرفي بدقة من عمود "المقرر"
+         crn, 
+         specId, 
+         level, 
+         capacity: DEFAULT_CAPACITY 
+       });
     }
     
     const rawType = iSchedType > -1 ? String(r[iSchedType] || '') : (iSectionType > -1 ? String(r[iSectionType] || '') : '');
@@ -4845,7 +4858,7 @@ function confirmMoveCourse(){
 }
 
 // ── GRID TAB (جدول الشعب) ──
-
+  
 function toggleImportedPanel(){
   const b=document.getElementById('imported-secs-body');
   if(b)b.style.display=b.style.display==='none'?'':'none';
@@ -12303,8 +12316,7 @@ window.executeAutoDistribution = function(dId) {
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
-
-        // 💡 بناء بنك الأرقام المرجعية بدقة متناهية مع الفصل التام بين رياض-101 و رياض-121
+          // 💡 بناء بنك الأرقام بالاعتماد على رمز المقرر (Code) الحرفي المستخرج من عمود "المقرر" في SS01
             const crnBank = {}; 
             
             const sectionsToScan = [
@@ -12315,32 +12327,12 @@ window.executeAutoDistribution = function(dId) {
             sectionsToScan.forEach(s => {
                 if (s.crn) {
                     const crnClean = String(s.crn).trim();
-                    const crnNum = parseInt(crnClean);
-                    let codeKey = s.code ? normCode(s.code) : '';
-                    
-                    // استخراج الرمز من الاسم لو وجد
-                    if (!codeKey && s.name) {
-                        const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
-                        if (m) codeKey = normCode(m[1]);
-                    }
+                    const codeKey = s.code ? normCode(s.code) : '';
 
-                    // 💡 تصحيح تلقائي ذكي جداً للرياضيات بناءً على أرقامها المرجعية الرسمية عندك:
-                    // 255 و 256 تخص رياض-101 حصراً
-                    // 259 وما بعدها تخص رياض-121 حصراً
-                    if (!codeKey && normName(s.name) === 'الرياضيات') {
-                        if (crnNum === 255 || crnNum === 256) {
-                            codeKey = 'ريا١٠١'; // أو رياض101
-                        } else if (crnNum >= 257) {
-                            codeKey = 'ريا١٢١'; // أو رياض121
-                        }
-                    }
-
-                    // تطبيع الرمز النهائي
                     if (codeKey) {
-                        codeKey = normCode(codeKey);
                         if (!crnBank[codeKey]) crnBank[codeKey] = [];
                         if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
-                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey });
+                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code });
                         }
                     }
                 }
@@ -12416,28 +12408,11 @@ window.executeAutoDistribution = function(dId) {
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
 // 💡 البحث الذكي الثلاثي للرقم المرجعي (1. بالرمز الموحد -> 2. بالاسم الدقيق -> 3. بالاسم المرن المقطوع)
+                  // 💡 البحث برمز المقرر الموحد حصراً (تطابق تام بالرمز الموجود في عمود "المقرر" بملف SS01)
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
-                        const targetNameKey = 'NAME_' + normName(c.name);
 
-                        let availableCrnList = null;
-                        
-                        if (targetCodeKey && crnBank[targetCodeKey] && crnBank[targetCodeKey].length > 0) {
-                            availableCrnList = crnBank[targetCodeKey];
-                        } else if (crnBank[targetNameKey] && crnBank[targetNameKey].length > 0) {
-                            availableCrnList = crnBank[targetNameKey];
-                        } else {
-                            // مطابقة مرنة للأسماء المقطوعة من رايات (مثل "السلوك الوظيفي... المهن" مع "السلوك الوظيفي... المهني")
-                            const matchedNameKey = Object.keys(crnBank).find(k => {
-                                if (!k.startsWith('NAME_')) return false;
-                                const cleanK = k.replace('NAME_', '');
-                                const cleanC = normName(c.name);
-                                return cleanK.length >= 6 && cleanC.length >= 6 && (cleanK.includes(cleanC) || cleanC.includes(cleanK));
-                            });
-                            if (matchedNameKey) {
-                                availableCrnList = crnBank[matchedNameKey];
-                            }
-                        }
+                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
 
                         if (availableCrnList && availableCrnList.length > 0) {
                             let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
@@ -12449,7 +12424,7 @@ window.executeAutoDistribution = function(dId) {
                                 crnObj.used += bStudents; // خصم السعة للرزمة
                             }
                         } else {
-                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق هذا المقرر.`);
+                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
                         }
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
