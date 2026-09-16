@@ -868,10 +868,13 @@ function getSpecNameById(specId){
 function getPeriods(){return ls('pq_periods',DEFAULT_PERIODS);}
 function savePeriods(p){ss('pq_periods',p);}
 function deptName(id){return (getDepts().find(d=>d.id===id)||{name:id}).name;}
-function canEdit(dId){if(!CU)return false;return CU.role==='admin'||(CU.role==='head'&&CU.dept===dId);}
+function canEdit(dId) {
+    if (!CU) return false;
+    return CU.role === 'admin' || CU.role === 'vdean' || (CU.role === 'head' && CU.dept === dId);
+}
 function canUploadReports() {
   if (!CU) return false;
-  return CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean';
+  return CU.role === 'admin' || CU.role === 'vdean';
 }  
 function isLocked(dId,di,pi){return !!(getLocks(dId)||{})[di+'_'+pi];}
 // قفل على مستوى الخلية في كيان محدد (شعبة أو رزمة)
@@ -1643,7 +1646,7 @@ function busyNoteText(info,curDeptId,isRoom){
   return (isRoom?' ⛔ محجوزة: ':' ⚠️ مشغول: ')+where+other;
 }
 function _fillInsSelect(dId,cellInsId){
-  const isAdmin=CU&&CU.role==='admin';
+  const isAdmin = CU && (CU.role === 'admin' || CU.role === 'vdean';
   const wrap=document.getElementById('cm-ins-override-wrap');
   if(wrap)wrap.style.display=isAdmin?'block':'none';
   const overrideChk=document.getElementById('cm-ins-override');
@@ -2250,7 +2253,7 @@ function undoLastChange(){
   }
 
   // تدقيق: لو مدير النظام استخدم "التجاوز"
-  if(insVal&&subj&&ctx&&CU&&CU.role==='admin'){
+   if(insVal && subj && ctx && CU && (CU.role === 'admin' || CU.role === 'vdean')){
     const poolDept=getCoursePoolDept(subj,ctx.deptId);
     const chosenInsDept=(getDepts().find(d=>getInstructors(d.id).find(i=>i.id===insVal))||{}).id;
     if(chosenInsDept&&chosenInsDept!==poolDept){
@@ -2433,19 +2436,7 @@ function clearBundleCellModal(){
 // ══ DRAG AND DROP ══
 // جدول الشعبة
 function dragCell(e,di,pi){dragSrc={di,pi};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','cell');}catch(err){}}
-function dropCell(e,dId,sId,di,pi){
-  e.preventDefault();e.currentTarget.classList.remove('dragover');
-  if(!dragSrc||(dragSrc.di===di&&dragSrc.pi===pi)){dragSrc=null;return;}
-  const _g0=getGrid(sId);
-  const _srcLk=_g0[dragSrc.di]&&_g0[dragSrc.di][dragSrc.pi]&&_g0[dragSrc.di][dragSrc.pi].locked;
-  const _dstLk=_g0[di]&&_g0[di][pi]&&_g0[di][pi].locked;
-  if(_srcLk||_dstLk){showToastMsg('🔒 محاضرة مقفلة — لا يمكن تحريكها');dragSrc=null;return;}
-  const g=getGrid(sId);const src=g[dragSrc.di][dragSrc.pi];const dest=g[di][pi];
-  // إذا الخلية المستهدفة مشغولة بمقرر مختلف → تحذير بدل التبديل
-  if(dest&&dest.subj&&src&&src.subj!==dest.subj){showToastMsg('⚠️ الخلية مشغولة بـ"'+dest.subj+'" — امسح محتواها أولاً أو اختر خلية فارغة');dragSrc=null;return;}
-  if(src){const conf=getCellConflicts(dId,sId,di,pi,src);if(conf.length){showToastMsg('⚠️ '+conf[0].msg);dragSrc=null;return;}}
-  g[di][pi]=src;g[dragSrc.di][dragSrc.pi]=dest||null;saveGrid(sId,g);dragSrc=null;renderDeptTabContent(currentDept);
-}
+
 // جدول الرزمة
 function dragBundleCell(e,di,pi){bundleDragSrc={di,pi};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','b');}catch(err){}}
 function dragCourseChip(e,el){chipDragSubj=el.getAttribute('data-course');bundleDragSrc=null;e.dataTransfer.effectAllowed='copy';try{e.dataTransfer.setData('text/plain','chip:'+chipDragSubj);}catch(err){}}
@@ -2508,7 +2499,7 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
       const rc=findRoomConflict(dId,bundleId,di,pi,autoRoom);
       if(rc){autoRoom='';roomNote=' (بدون قاعة — القاعة محجوزة في: '+rc.name+')';}
     }
-    pushUndoState(bundleId, true); // 💡 حفظ الحالة قبل التعديل للتراجع
+    pushUndoState(bundleId, true);
     g[di][pi]={subj,insId:autoIns,roomId:autoRoom,crn:autoCrn,cellType:autoType||undefined};
     if(autoIns||autoRoom||autoCrn){
       const insNm=autoIns?resolveInstructorName(dId,autoIns):'';
@@ -2528,16 +2519,75 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
   const gCheck = getBundleGrid(bundleId);
   const movingCell = gCheck[sd][sp];
   if(movingCell && movingCell.subj && !canUserManageCourse(movingCell.subj, null, dId)){
-    showToastMsg('⛔ لا يمكنك تحريك مقرر تابع لقسم آخر.');
+    showToastMsg('⛔ لا يمكنك تحريك مقرر يتبع لقسم آخر.');
     return;
   }
   {const _bg2=getBundleGrid(bundleId);const _srcB=_bg2[sd]&&_bg2[sd][sp];const _dstB=_bg2[di]&&_bg2[di][pi];if((_srcB&&_srcB.locked)||(_dstB&&_dstB.locked)){showToastMsg('🔒 محاضرة مقفلة — لا يمكن تحريكها');return;}}
   const g=getBundleGrid(bundleId);const src=g[sd][sp];const dest=g[di][pi];
   if(dest&&dest.subj&&src&&src.subj!==dest.subj){showToastMsg('⚠️ الخلية مشغولة بـ"'+dest.subj+'" — امسح محتواها أولاً');return;}
-  if(src){const conf=getCellConflicts(dId,bundleId,di,pi,src);if(conf.length){showToastMsg('⚠️ '+conf[0].msg);return;}}
   
-  pushUndoState(bundleId, true); // 💡 حفظ الحالة قبل التعديل للتراجع
+  // 💡 التعديل هنا: تم تجاهل تعارض الرقم المرجعي عند السحب والإفلات
+  if(src){
+      const conf = getCellConflicts(dId, bundleId, di, pi, src);
+      const blockingConf = conf.filter(c => c.type === 'ins' || c.type === 'room');
+      if(blockingConf.length){showToastMsg('⚠️ '+blockingConf[0].msg);return;}
+  }
+  
+  pushUndoState(bundleId, true);
   g[di][pi]=src;g[sd][sp]=dest||null;saveBundleGrid(bundleId,g);renderDeptTabContent(currentDept);
+}
+
+function dropCell(e,dId,sId,di,pi){
+  e.preventDefault();e.currentTarget.classList.remove('dragover');
+  if(!dragSrc||(dragSrc.di===di&&dragSrc.pi===pi)){dragSrc=null;return;}
+  const _g0=getGrid(sId);
+  const _srcLk=_g0[dragSrc.di]&&_g0[dragSrc.di][dragSrc.pi]&&_g0[dragSrc.di][dragSrc.pi].locked;
+  const _dstLk=_g0[di]&&_g0[di][pi]&&_g0[di][pi].locked;
+  if(_srcLk||_dstLk){showToastMsg('🔒 محاضرة مقفلة — لا يمكن تحريكها');dragSrc=null;return;}
+  const g=getGrid(sId);const src=g[dragSrc.di][dragSrc.pi];const dest=g[di][pi];
+
+  if(src && src.subj && !canUserManageCourse(src.subj, null, dId)){
+    showToastMsg('⛔ لا يمكنك تحريك مقرر يتبع لقسم آخر.');
+    dragSrc=null;
+    return;
+  }
+
+  if(dest&&dest.subj&&src&&src.subj!==dest.subj){showToastMsg('⚠️ الخلية مشغولة بـ"'+dest.subj+'" — امسح محتواها أولاً أو اختر خلية فارغة');dragSrc=null;return;}
+  
+  // 💡 التعديل هنا: تم تجاهل تعارض الرقم المرجعي عند السحب
+  if(src){
+      const conf = getCellConflicts(dId, sId, di, pi, src);
+      const blockingConf = conf.filter(c => c.type === 'ins' || c.type === 'room');
+      if(blockingConf.length){showToastMsg('⚠️ '+blockingConf[0].msg);dragSrc=null;return;}
+  }
+
+  pushUndoState(sId, false);
+  g[di][pi]=src;g[dragSrc.di][dragSrc.pi]=dest||null;saveGrid(sId,g);dragSrc=null;renderDeptTabContent(currentDept);
+}
+
+function dropMasterCard(e,dId,di,pi){
+  e.preventDefault();e.currentTarget.classList.remove('dragover');
+  if(!masterDragSrc)return;const {sId,di:sd,pi:sp,isB}=masterDragSrc;masterDragSrc=null;
+  if(sd===di&&sp===pi)return;
+  {const _mG=isB?getBundleGrid(sId):getGrid(sId);const _mS=_mG[sd]&&_mG[sd][sp];const _mD=_mG[di]&&_mG[di][pi];if((_mS&&_mS.locked)||(_mD&&_mD.locked)){showToastMsg('🔒 المحاضرة مقفلة — لا يمكن تحريكها');return;}}
+
+  const g = isB ? getBundleGrid(sId) : getGrid(sId);
+  const src = g[sd][sp];
+
+  if(src && src.subj && !canUserManageCourse(src.subj, null, dId)){
+    showToastMsg('⛔ لا يمكنك تحريك مقرر يتبع لقسم آخر.');
+    return;
+  }
+
+  if(src){
+      const conf = getCellConflicts(dId, sId, di, pi, src);
+      const blockingConf = conf.filter(c => c.type === 'ins' || c.type === 'room');
+      if(blockingConf.length){showToastMsg('⚠️ '+blockingConf[0].msg);return;}
+  }
+
+  if(isB){pushUndoState(sId, true); g[di][pi]=src;g[sd][sp]=null;saveBundleGrid(sId,g);}
+  else{pushUndoState(sId, false); g[di][pi]=src;g[sd][sp]=null;saveGrid(sId,g);}
+  renderDeptTabContent(currentDept);
 }
 // جدول المدرب
 function dragInstrCell(e,dId,sId,di,pi,isB){instrDragSrc={dId,sId,di,pi,isB:!!isB};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','instr');}catch(err){}}
@@ -2585,15 +2635,7 @@ function dropInstrCell(e,dId,di,pi){
 }
 // الجدول العام
 function dragMasterCard(e,sId,di,pi,isB){masterDragSrc={sId,di,pi,isB:!!isB};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','master');}catch(err){};e.stopPropagation();}
-function dropMasterCard(e,dId,di,pi){
-  e.preventDefault();e.currentTarget.classList.remove('dragover');
-  if(!masterDragSrc)return;const {sId,di:sd,pi:sp,isB}=masterDragSrc;masterDragSrc=null;
-  if(sd===di&&sp===pi)return;
-  {const _mG=isB?getBundleGrid(sId):getGrid(sId);const _mS=_mG[sd]&&_mG[sd][sp];const _mD=_mG[di]&&_mG[di][pi];if((_mS&&_mS.locked)||(_mD&&_mD.locked)){showToastMsg('🔒 المحاضرة مقفلة — لا يمكن تحريكها');return;}}
-  if(isB){const g=getBundleGrid(sId);const src=g[sd][sp];if(src){const c=getCellConflicts(dId,sId,di,pi,src);if(c.length){showToastMsg('⚠️ '+c[0].msg);return;}}g[di][pi]=src;g[sd][sp]=null;saveBundleGrid(sId,g);}
-  else{const g=getGrid(sId);const src=g[sd][sp];if(src){const c=getCellConflicts(dId,sId,di,pi,src);if(c.length){showToastMsg('⚠️ '+c[0].msg);return;}}g[di][pi]=src;g[sd][sp]=null;saveGrid(sId,g);}
-  renderDeptTabContent(currentDept);
-}
+
 function renderHome(){
   const uploadWizardBanner = canUploadReports() ? `
   <div class="panel" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
@@ -3392,17 +3434,38 @@ window.downloadSectionsMenu = function(deptId) {
 };
 // يصدّر جدول كامل بكل شعب القسم (كل التخصصات) في ملف واحد — شيت منفصل لكل مستوى، بكل معلومات المحاضرة
 // ══ جدول إسناد رزمة المستجدين — المستوى الأول فقط، شيت منفصل لكل شعبة/رزمة، بدون تكرار، مع الشعار ══
-async function exportLevel1AssignmentReport(deptId){
+async function exportLevel1AssignmentReport(dId){
   if(typeof ExcelJS==='undefined'){showToastMsg('❌ تعذّر تحميل مكتبة Excel — تأكد من اتصالك بالإنترنت وأعد المحاولة');return;}
   try{
-  const specs=getSpecs(deptId);
-  const bundles=getBundles(deptId).filter(b=>b.level==='المستوى الأول');
-  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب/رزم بالمستوى الأول لهذا القسم');return;}
+  let bundles=getBundles(dId).filter(b=>b.level==='المستوى الأول');
+  
+  // 💡 جلب الشعب المتقاطعة للمستوى الأول لأقسام الدراسات والحاسب
+  if (dId === 'sup' || dId === 'it') {
+     bundles = [];
+     getDepts().forEach(d => {
+        if (d.id === dId) return;
+        getBundles(d.id).filter(b=>b.level==='المستوى الأول').forEach(b => {
+           const g = getBundleGrid(b.id);
+           const hasMyCourse = g.some(day => day.some(cell => {
+               if (!cell || !cell.subj) return false;
+               const cCat = courseCategoryByName(d.id, cell.subj);
+               if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cell.subj);
+               if (dId === 'it') return cCat === 'comp' || isCompCourseByName(cell.subj);
+               return false;
+           }));
+           if (hasMyCourse) bundles.push({...b, actualDeptId: d.id, name: `${b.name} (${d.name})`});
+        });
+     });
+  }
+
+  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب/رزم بالمستوى الأول تحتوي مقرراتك');return;}
 
   const wb=new ExcelJS.Workbook();
-
   const usedNames=new Set();
+  
   bundles.forEach(b=>{
+    const actualDeptId = b.actualDeptId || dId;
+    const specs = getSpecs(actualDeptId);
     const specName=(specs.find(s=>s.id===b.specId)||{}).name||'';
     let sheetName=sanitizeSheetName(`${b.name} - ${specName} - المستوى الأول`);
     let n=2;while(usedNames.has(sheetName)){sheetName=sanitizeSheetName(`${b.name}${n} - ${specName}`);n++;}
@@ -3421,8 +3484,17 @@ async function exportLevel1AssignmentReport(deptId){
     const g=getBundleGrid(b.id);
     const seen=new Set();
     const rows=[];
+    
     function pushRow(cellPart){
       if(!cellPart||!cellPart.subj)return;
+      
+      // تصفية المواد لتنزيل مواد القسم المختص فقط إذا كان دراسات أو حاسب
+      if (dId === 'sup' || dId === 'it') {
+          const cCat = courseCategoryByName(actualDeptId, cellPart.subj);
+          if (dId === 'sup' && cCat !== 'sup' && !isSupCourseByName(cellPart.subj)) return;
+          if (dId === 'it' && cCat !== 'comp' && !isCompCourseByName(cellPart.subj)) return;
+      }
+
       const key=cellPart.subj+'|'+(cellPart.crn||'');
       if(seen.has(key))return;
       seen.add(key);
@@ -3432,15 +3504,17 @@ async function exportLevel1AssignmentReport(deptId){
         crn:cellPart.crn||b.crn||''
       });
     }
+    
     g.forEach(dayArr=>dayArr.forEach(cell=>{
       if(!cell)return;
       pushRow(cell);
       if(cell.sub2)pushRow(cell.sub2);
     }));
+    
     if(!rows.length){
       const emptyRow=ws.getRow(r);
       ws.mergeCells(r,1,r,3);
-      emptyRow.getCell(1).value='لا توجد مقررات مجدولة لهذه الشعبة';
+      emptyRow.getCell(1).value='لا توجد مقررات مجدولة لهذه الشعبة تخص هذا القسم';
       styleExcelCell(emptyRow.getCell(1),{align:'center'});
     }else{
       rows.forEach((row,idx)=>{
@@ -3459,33 +3533,66 @@ async function exportLevel1AssignmentReport(deptId){
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download='جدول_إسناد_رزمة_المستجدين_'+deptName(deptId).replace(/ /g,'_')+'.xlsx';
+  a.href=url;a.download='جدول_إسناد_رزمة_المستجدين_'+deptName(dId).replace(/ /g,'_')+'.xlsx';
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1500);
   showToastMsg(`✅ تم تصدير جدول إسناد رزمة المستجدين — ${bundles.length} شعبة`);
   }catch(err){
     console.error('exportLevel1AssignmentReport error:',err);
-    showToastMsg('❌ حدث خطأ أثناء التصدير: '+(err&&err.message?err.message:'خطأ غير معروف')+' — أرسل هذه الرسالة للمطوّر');
+    showToastMsg('❌ حدث خطأ أثناء التصدير: '+(err&&err.message?err.message:'خطأ غير معروف'));
   }
 }
 
-function downloadFullScheduleByLevel(deptId){
-  const bundles=getBundles(deptId);
-  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب لهذا القسم');return;}
-  const specs=getSpecs(deptId);
+function downloadFullScheduleByLevel(dId){
+  let bundles = getBundles(dId);
+
+  // 💡 جلب الشعب المتقاطعة لأقسام الدراسات والحاسب
+  if (dId === 'sup' || dId === 'it') {
+     bundles = [];
+     getDepts().forEach(d => {
+        if (d.id === dId) return;
+        getBundles(d.id).forEach(b => {
+           const g = getBundleGrid(b.id);
+           const hasMyCourse = g.some(day => day.some(cell => {
+               if (!cell || !cell.subj) return false;
+               const cCat = courseCategoryByName(d.id, cell.subj);
+               if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cell.subj);
+               if (dId === 'it') return cCat === 'comp' || isCompCourseByName(cell.subj);
+               return false;
+           }));
+           if (hasMyCourse) bundles.push({...b, actualDeptId: d.id, name: `${b.name} (${d.name})`});
+        });
+     });
+  }
+
+  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب مجدولة قابلة للتصدير');return;}
+  
   const P=getPeriods();
-  const levelsPresent=PLAN_LEVELS.filter(l=>bundles.some(b=>b.level===l));
+  const levelsPresent=[...new Set(bundles.map(b => b.level))].filter(Boolean);
   if(!levelsPresent.length){showToastMsg('⚠️ لا توجد مستويات محددة للشعب');return;}
+  
   const headerOrder=['التخصص','الشعبة','اليوم','الوقت','اسم المقرر','نوع المحاضرة','اسم المدرب','رقم القاعة','الرقم المرجعي'];
   const sheets=[];
   let totalRows=0;
+  
   levelsPresent.forEach(level=>{
     const rows=[];
     bundles.filter(b=>b.level===level).forEach(b=>{
+      const actualDeptId = b.actualDeptId || dId;
+      const specs = getSpecs(actualDeptId);
       const specName=(specs.find(s=>s.id===b.specId)||{}).name||'';
       const g=getBundleGrid(b.id);
+      
       function pushRow(cellPart,di,pi,isSub2){
         if(!cellPart||!cellPart.subj)return;
+        
+        // تصفية المواد لتنزيل مواد القسم المختص فقط إذا كان دراسات أو حاسب
+        if (dId === 'sup' || dId === 'it') {
+            const cCat = courseCategoryByName(actualDeptId, cellPart.subj);
+            if (dId === 'sup' && cCat !== 'sup' && !isSupCourseByName(cellPart.subj)) return;
+            if (dId === 'it' && cCat !== 'comp' && !isCompCourseByName(cellPart.subj)) return;
+        }
+
         const pTime=P[pi]?P[pi].t:'';
         rows.push({
           'التخصص':specName,
@@ -3494,8 +3601,8 @@ function downloadFullScheduleByLevel(deptId){
           'الوقت':formatTimeCompact(computeCellTimeRange(pTime,isSub2?1:(cellPart.duration||2),isSub2)),
           'اسم المقرر':cellPart.subj,
           'نوع المحاضرة':cellTypeLabel(cellPart.cellType),
-          'اسم المدرب':cellPart.insId?resolveInstructorName(deptId,cellPart.insId):'',
-          'رقم القاعة':cellPart.roomId?resolveRoomName(deptId,cellPart.roomId):'',
+          'اسم المدرب':cellPart.insId?resolveInstructorName(actualDeptId,cellPart.insId):'',
+          'رقم القاعة':cellPart.roomId?resolveRoomName(actualDeptId,cellPart.roomId):'',
           'الرقم المرجعي':cellPart.crn||b.crn||''
         });
       }
@@ -3510,7 +3617,7 @@ function downloadFullScheduleByLevel(deptId){
     sheets.push({name:level,title:`جدول الشعب — ${level}`,headers:headerOrder,rows});
   });
   if(!totalRows){showToastMsg('⚠️ لا توجد محاضرات مجدولة لتصديرها');return;}
-  downloadStyledExcel(sheets,`جدول_الشعب_${deptName(deptId)}`.replace(/ /g,'_'));
+  downloadStyledExcel(sheets,`جدول_الشعب_${deptName(dId)}`.replace(/ /g,'_'));
   showToastMsg('✅ تم تنزيل جدول الشعب الكامل — شيت منفصل لكل مستوى');
 }
 
@@ -6125,13 +6232,24 @@ function computeCellTimeRange(periodTimeStr,duration,isSub2){
   return isSub2?`${fmt(midMin)} - ${fmt(endMin)}`:`${fmt(startMin)} - ${fmt(midMin)}`;
 }
 function exportBundleEnrollTemplate(dId,bundleId){
-  const bundle=getBundles(dId).find(b=>b.id===bundleId);if(!bundle)return;
+  let bundle = getBundles(dId).find(b=>b.id===bundleId);
+  let actualDeptId = dId;
+  
+  // 💡 بحث ذكي للوصول للشعبة حتى لو كانت في قسم آخر
+  if (!bundle) {
+     for (const d of getDepts()) {
+        bundle = getBundles(d.id).find(b=>b.id===bundleId);
+        if (bundle) { actualDeptId = d.id; break; }
+     }
+  }
+  if(!bundle) return;
+
   const P=getPeriods(),g=getBundleGrid(bundleId);
   const rows=[];
   function pushRow(cellPart,pTime,isSub2){
     if(!cellPart||!cellPart.subj)return;
-    const room=resolveRoomObj(dId,cellPart.roomId);
-    const ins=resolveInstructorObj(dId,cellPart.insId);
+    const room=resolveRoomObj(actualDeptId,cellPart.roomId);
+    const ins=resolveInstructorObj(actualDeptId,cellPart.insId);
     const building=room.building||deriveBuildingFromRoomName(room.name);
     rows.push({
       'الرقم المرجعي':cellPart.crn||bundle.crn||'',
