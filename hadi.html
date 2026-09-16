@@ -12066,7 +12066,7 @@ window.executeAutoDistribution = function(dId) {
             return cCat === 'dept'; 
         }
 
-        // 1. قراءة وإرفاق "سعة الرزمة" من المدخلات
+        // قراءة إعدادات الرزم وسعتها
         const levelsConfig = [];
         document.querySelectorAll('.wiz-level-input').forEach(inp => {
             const count = parseInt(inp.value) || 0;
@@ -12089,6 +12089,7 @@ window.executeAutoDistribution = function(dId) {
             courseInsMap[cName].push(cb.value);
         });
 
+        // رصد انشغال المدربين والقاعات
         const busyIns = {};  
         const busyRoom = {}; 
         
@@ -12117,8 +12118,10 @@ window.executeAutoDistribution = function(dId) {
 
         const missingCrnsLog = new Set(); 
 
-        // دوال تطبيع الرموز والأسماء
-        const normCode = s => (s || '')
+        // 💡 تحويل الأرقام المشرقية (١ ٢ ٣) إلى قياسية (1 2 3) وتطبيع الرموز
+        const convertArabicDigits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+
+        const normCode = s => convertArabicDigits(s)
             .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
             .replace(/[إأآا]/g, 'ا')
             .trim()
@@ -12131,17 +12134,12 @@ window.executeAutoDistribution = function(dId) {
             .replace(/[يى]/g, 'ي')
             .trim();
 
-        // بناء خريطة استنتاج الرمز من الخطط المعتمدة للشعب التي لا تملك رمزاً مسجلاً
-        const courseNameToCodeMap = {};
+        // بناء خريطة الأرقام المرجعية لجميع المقررات في الكلية (من واقع ملفات رايات المرفوعة)
+        const crnToOfficialCodeMap = {};
+        const typeMap = ls('pq_crn_type_map_' + dId, {});
         getDepts().forEach(d => {
-            getSpecs(d.id).forEach(sp => {
-                getPlan(d.id, sp.id).forEach(c => {
-                    if (c.name && c.code) {
-                        const nKey = normName(c.name);
-                        if (!courseNameToCodeMap[nKey]) courseNameToCodeMap[nKey] = normCode(c.code);
-                    }
-                });
-            });
+            const tm = ls('pq_crn_type_map_' + d.id, {});
+            Object.assign(typeMap, tm);
         });
 
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
@@ -12150,7 +12148,7 @@ window.executeAutoDistribution = function(dId) {
 
             const crnBank = {}; 
             
-            // مسح الشعب من القسم التخصصي وقسم الخدمة (الدراسات العامة / الحاسب)
+            // جلب الشعب من القسمين
             const sectionsToScan = [
                 ...getSections(targetDeptId),
                 ...(dId !== targetDeptId ? getSections(dId) : [])
@@ -12158,32 +12156,48 @@ window.executeAutoDistribution = function(dId) {
 
             sectionsToScan.forEach(s => {
                 if (s.crn) {
+                    const crnClean = String(s.crn).trim();
                     let codeKey = s.code ? normCode(s.code) : '';
                     
-                    // محاولة استخراج الرمز من الاسم إذا كان مكتوباً داخله (مثل انجل-111)
+                    // استخراج الرمز من الاسم إذا وجد
                     if (!codeKey && s.name) {
-                        const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?\d{3})/);
+                        const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                         if (m) codeKey = normCode(m[1]);
                     }
 
-                    // محاولة معرفة الرمز من قاعدة بيانات الخطط المعتمدة بواسطة اسم المقرر
-                    if (!codeKey && s.name) {
-                        const mappedCode = courseNameToCodeMap[normName(s.name)];
-                        if (mappedCode) codeKey = mappedCode;
+                    // إذا كان مسجلاً في خرائط رايات
+                    if (!codeKey && typeMap[crnClean] && typeMap[crnClean].code) {
+                        codeKey = normCode(typeMap[crnClean].code);
                     }
 
-                    // التسجيل بالرمز أولاً كأولوية قصوى
+             // 💡 حل عام وشامل لأي مقرر في الكلية تتشابه أسماؤه وتختلف رموزه:
+                    if (!codeKey && s.name) {
+                        const targetNorm = normName(s.name);
+                        // البحث في خطط القسم المستهدف عن مقرر بنفس الاسم لاستنتاج رمزه المعتمد
+                        for (let confItem of configs) {
+                            const p = getPlan(targetDeptId, confItem.specId);
+                            const matchedInPlan = p.find(c => normName(c.name) === targetNorm);
+                            if (matchedInPlan && matchedInPlan.code) {
+                                codeKey = normCode(matchedInPlan.code);
+                                break;
+                            }
+                        }
+                    }
+
+                    // التسجيل بالرمز
                     if (codeKey) {
                         if (!crnBank[codeKey]) crnBank[codeKey] = [];
-                        if (!crnBank[codeKey].find(x => x.crn === s.crn)) {
-                            crnBank[codeKey].push({ crn: s.crn, cap: s.capacity || 40, used: 0, rawCode: s.code || codeKey, rawName: s.name });
+                        if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
+                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 42, used: 0, rawCode: s.code || codeKey, rawName: s.name });
                         }
-                    } else if (s.name) {
-                        // حل احتياطي للشعب النادرة التي لا يُعرف رمزها
+                    }
+
+                    // التسجيل الاحتياطي بالاسم أيضاً
+                    if (s.name) {
                         const nameKey = 'NAME_' + normName(s.name);
                         if (!crnBank[nameKey]) crnBank[nameKey] = [];
-                        if (!crnBank[nameKey].find(x => x.crn === s.crn)) {
-                            crnBank[nameKey].push({ crn: s.crn, cap: s.capacity || 40, used: 0, rawCode: '', rawName: s.name });
+                        if (!crnBank[nameKey].find(x => x.crn === crnClean)) {
+                            crnBank[nameKey].push({ crn: crnClean, cap: s.capacity || 42, used: 0, rawCode: codeKey, rawName: s.name });
                         }
                     }
                 }
@@ -12204,7 +12218,6 @@ window.executeAutoDistribution = function(dId) {
                     saveBundleGrid(bId, emptyGrid());
                 }
 
-                // تحديث السعة
                 matchingBundles.forEach(b => {
                     b.students = conf.capacity;
                 });
@@ -12269,25 +12282,33 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
-                        // اختيار الرقم المرجعي المطابق للرمز
+                        // 💡 البحث برمز المقرر الموحد (مع دعم الأرقام العربية والإنجليزية)
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
                         const targetNameKey = 'NAME_' + normName(c.name);
 
-                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) 
-                            ? crnBank[targetCodeKey] 
-                            : (crnBank[targetNameKey] || null);
+                        // الأولوية القصوى للرمز، ثم الاسم كاحتياط
+                        let availableCrnList = null;
+                        if (targetCodeKey && crnBank[targetCodeKey]) {
+                            availableCrnList = crnBank[targetCodeKey];
+                        } else if (crnBank[targetNameKey]) {
+                            availableCrnList = crnBank[targetNameKey];
+                        }
 
-                        if (availableCrnList) {
+                        if (availableCrnList && availableCrnList.length > 0) {
                             let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
+                            if (!crnObj) {
+                                // في حال امتلاء السعة بالكامل نأخذ أول رقم متاح لمنع بقاء الخلية فارغة
+                                crnObj = availableCrnList[0];
+                            }
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // خصم السعة
+                                crnObj.used += bStudents; // خصم السعة للرزمة مرة واحدة فقط
                             } else {
-                                missingCrnsLog.add(`- ${c.name} [رمز: ${c.code || 'غير محدد'}] في [${fullBundleContext}]: الأرقام المرجعية المتاحة استُهلكت سعتها بالكامل.`);
+                                missingCrnsLog.add(`- ${c.name} [${c.code || ''}] في [${fullBundleContext}]: نفدت سعة الأرقام المتاحة.`);
                             }
                         } else {
-                            missingCrnsLog.add(`- ${c.name} [رمز: ${c.code || 'غير محدد'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر.`);
+                            missingCrnsLog.add(`- ${c.name} [${c.code || ''}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة لهذا الرمز.`);
                         }
 
                         let assignedIns = null; 
@@ -12297,7 +12318,6 @@ window.executeAutoDistribution = function(dId) {
                             const isHalf = isSplitCourse && (currentPlaced + sess) === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                             
-                            // حساب دقيق لعدد لقاءات النظري والعملي
                             let theoryNeeded = Math.ceil(((parseInt(c.mh)||parseInt(c.lecture)||0) + (parseInt(c.tm)||parseInt(c.training)||0)) / 2);
                             let practNeeded = Math.ceil((parseInt(c.am)||parseInt(c.practical)||0) / 2);
                             if (isPhysicsExempt) { theoryNeeded = 1; practNeeded = 0; }
@@ -12403,22 +12423,19 @@ window.executeAutoDistribution = function(dId) {
                     </div>
                     <div class="modal-body">
                         <p style="font-size:13px; color:var(--tx); margin-bottom:12px; font-weight:bold;">
-                            ✅ تم التوزيع التلقائي بدقة حسب الرموز، ووجدت الملاحظات التالية على الأرقام المرجعية:
+                            تم التوزيع مع الملاحظات التالية:
                         </p>
                         <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; max-height:280px; overflow-y:auto; margin-bottom:12px; font-size:12px; color:#92400e; line-height:1.6;">
                             ${logHtml}
                         </div>
-                        <div style="font-size:11px; color:#b45309; background:#ffedd5; padding:8px; border-radius:6px; margin-bottom:16px;">
-                            💡 <b>ملاحظة:</b> تم حفظ كل مقرر برمز الخطة المعتمدة حصراً لمنع تداخل أرقام المقررات المتشابهة في المسميات.
-                        </div>
-                        <button class="bpri" style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); border:none; padding:12px; font-size:14px;" onclick="document.getElementById('crnMissingModal').remove()">حسناً، فهمت</button>
+                        <button class="bpri" style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); border:none; padding:12px; font-size:14px;" onclick="document.getElementById('crnMissingModal').remove()">حسناً</button>
                     </div>
                 </div>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            showToastMsg(`✅ اكتمل التوزيع مع التحقق من الرموز بدقة.`);
+            showToastMsg(`✅ اكتمل التوزيع مع مطابقة الأرقام.`);
         } else {
-            showToastMsg(`✅ اكتمل التوزيع بنجاح! تم إسناد الأرقام المرجعية المطابقة للرموز.`);
+            showToastMsg(`✅ اكتمل التوزيع بنجاح! تم إسناد الأرقام المرجعية للرياضيات وباقي المقررات.`);
         }
 
     } catch (err) {
