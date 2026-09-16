@@ -3858,9 +3858,10 @@ window.renderBundleGrid = function(deptId,bundle,editable){
   });
 
 const legendRows = (() => {
-    const usedCrns = collectUsedCrnsAllDepts();
+    const crnUsageMap = getCrnUsageMapAllDepts();
+    const currentBundleStudents = Number(bundle.students) || 20;
     
-    // جمع كل الشُعب من كافة أقسام الكلية لتسهيل استخراج أرقامها بغض النظر عن القسم
+    // جمع كل الشُعب من كافة أقسام الكلية لتسهيل استخراج أرقامها وسعتها
     const allCollegeSections = [];
     getDepts().forEach(d => {
         getSections(d.id).forEach(s => allCollegeSections.push({...s, _dId: d.id}));
@@ -3875,7 +3876,6 @@ const legendRows = (() => {
       const ok = (scheduled >= needed);
       const remaining = Math.max(0, needed - scheduled);
 
-     // 💡 مطابقة حصرية وصارمة برمز المقرر (تمنع تماماً خلط رياض-101 مع رياض-121)
       const targetCodeNorm = c.code ? normCode(c.code) : '';
       const targetNameNorm = normName(c.name);
 
@@ -3884,31 +3884,48 @@ const legendRows = (() => {
           const sNameNorm = normName(s.name);
           
           let isMatch = false;
-          
-          // 1. إذا كان رمز المقرر موجوداً في الخطة (وهو الأصل)، فالمطابقة بالرمز فقط لا غير
           if (targetCodeNorm) {
               if (sCodeNorm) {
                   isMatch = (sCodeNorm === targetCodeNorm);
               } else if (s.name) {
-                  // فحص إذا كان الرمز مدمجاً في الاسم
                   const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                   if (m) isMatch = (normCode(m[1]) === targetCodeNorm);
               }
           } else {
-              // 2. إذا وفقط إذا كان المقرر في الخطة بلا رمز أصلاً، نطابق بالاسم
               isMatch = (sNameNorm === targetNameNorm);
           }
 
-          return isMatch && s.crn && !usedCrns.has(s.crn);
+          if (!isMatch || !s.crn) return false;
+
+          // 💡 فحص السعة الذكي: السماح بمشاركة الرقم طالما السعة تستوعب طلاب هذه الرزمة
+          const crnClean = String(s.crn).trim();
+          const maxCap = Number(s.capacity) || 40;
+          const usage = crnUsageMap[crnClean] || { usedSeats: 0, bundleIds: new Set() };
+          
+          // إذا كان الرقم مستخدماً بالفعل داخل نفس هذه الرزمة الحالية، نُظهره دائماً لإكمال اللقاء الثاني
+          if (usage.bundleIds.has(bundleId)) return true;
+
+          // إذا كان في رزمة أخرى، نتحقق هل ما زال فيه متسع للرزمة الحالية؟
+          const freeSeats = maxCap - usage.usedSeats;
+          return freeSeats >= currentBundleStudents;
       });
 
       const crnChips = allLinked.map(s => {
+        const crnClean = String(s.crn).trim();
+        const maxCap = Number(s.capacity) || 40;
+        const usage = crnUsageMap[crnClean] || { usedSeats: 0, bundleIds: new Set() };
+        const freeSeats = Math.max(0, maxCap - usage.usedSeats);
+        const isShared = usage.usedSeats > 0 && !usage.bundleIds.has(bundleId);
+
         const linkedCrn = getLinkedCrn(s._dId || deptId, s.crn);
         const linkBadge = linkedCrn ? `<span style="font-size:8px;background:#ede9fe;color:#6d28d9;border-radius:3px;padding:0 3px;margin-right:2px" title="مرتبط بـ ${esc(linkedCrn)}">🔗${esc(linkedCrn)}</span>` : '';
         const resolved = resolveCrnType(s._dId || deptId, s.crn);
         const chipStyle = resolved.type ? `style="color:${cellTypeColor(resolved.type)};border-color:${cellTypeColor(resolved.type)}"` : '';
-        const chipTitle = resolved.type ? `نوع المحاضرة (${resolved.source==='banner'?'حسب ملف رايات':'مضبوط بالجدول'}): ${cellTypeLabel(resolved.type)} — انقر لاختيار الرقم` : 'انقر لاختيار الرقم';
-        return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${s._dId || deptId}')" ${chipStyle} title="${chipTitle}">🔢 ${esc(s.crn)}${linkBadge}</span>`;
+        
+        // شارة توضح المقاعد المتبقية إذا كان الرقم مشتركاً
+        const capBadge = isShared ? `<span style="font-size:8px;background:#fef3c7;color:#92400e;border-radius:3px;padding:0 3px;margin-right:3px">متبقي:${freeSeats}</span>` : '';
+
+        return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${s._dId || deptId}')" ${chipStyle} title="السعة الكلية: ${maxCap} | المستهلك: ${usage.usedSeats} | المتبقي: ${freeSeats}">🔢 ${esc(s.crn)}${capBadge}${linkBadge}</span>`;
       }).join('');
 
       const canManageCourse = canUserManageCourse(c.name, c.cat, bundle.deptId || deptId);
@@ -3957,9 +3974,8 @@ const legendRows = (() => {
         <td>${counter}</td>
         <td>${dragChip}</td>
       </tr>`;
-      }).join('');
+    }).join('');
   })();
-
   const legend=`<div style="overflow-x:auto;margin-bottom:4px">
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:10px;margin-bottom:6px;background:#f8fafc;border:1px solid var(--bd);border-radius:6px;padding:5px 10px">
       <span style="font-weight:700;color:var(--mu)">🎨 دليل ألوان الرقم المرجعي (حسب نوع المحاضرة):</span>
@@ -6442,29 +6458,47 @@ function cellTypeColor(cellType){
   if(cellType==='selfstudy')return '#78350f';
   return '#6b7280';
 }
-// يبحث عن نوع المحاضرة (نظري/عملي/...) لرقم مرجعي معيّن بالبحث فعلياً داخل جدول القسم (الشعب + الرزم)
-// — يُستخدم كحل بديل فوري لتلوين الرقم حتى لو ما رفع المستخدم ملف Banner بعد (لأن النوع غالباً مضبوط
-// مسبقاً يدوياً بنافذة "تعيين المحاضرة" حتى قبل أي مقارنة خارجية)
-// يبحث عن نوع المحاضرة (نظري/عملي/...) لرقم مرجعي معيّن بالبحث فعلياً داخل **كل أقسام** البرنامج (لا
-// القسم الحالي فقط) — لأن الخلية الفعلية المستخدم فيها هذا الرقم قد تكون بقسم مختلف تمامًا عن القسم
-// اللي تُعرض فيه القائمة حالياً (مثل حاسب-101/102 المجدولة بقسم آخر بينما تُعرض هنا من قسم الدراسات)
-// يجمع كل الأرقام المرجعية المستخدمة فعلياً بأي خلية جدول بأي قسم (لإخفائها من قائمة الاقتراحات
-// حتى لا يُعاد استخدام نفس الرقم لمقرر آخر عن طريق الخطأ)
-function collectUsedCrnsAllDepts(){
-  const used=new Set();
-  const scan=g=>{
-    for(const dayArr of g)for(const cell of dayArr){
-      if(!cell)continue;
-      if(cell.crn)used.add(cell.crn);
-      if(cell.sub2&&cell.sub2.crn)used.add(cell.sub2.crn);
+
+  // 💡 حساب إشغال الأرقام المرجعية وسعتها المتبقية عبر كافة الرزم والشعب
+function getCrnUsageMapAllDepts() {
+  const usage = {}; // crn -> { usedSeats: 0, bundleIds: Set() }
+
+  const scan = (g, studentsCount, entityId) => {
+    if (!g || !Array.isArray(g)) return;
+    const countedInThisEntity = new Set(); // نحسب سعة الرزمة مرة واحدة فقط للرقم حتى لو تكرر في لقاءين
+
+    for (const dayArr of g) {
+      if (!Array.isArray(dayArr)) continue;
+      for (const cell of dayArr) {
+        if (!cell) continue;
+
+        const checkPart = (c) => {
+          if (c && c.subj && c.subj.trim() && c.crn) {
+            const crnClean = String(c.crn).trim();
+            if (!usage[crnClean]) usage[crnClean] = { usedSeats: 0, bundleIds: new Set() };
+            
+            if (!countedInThisEntity.has(crnClean)) {
+              countedInThisEntity.add(crnClean);
+              usage[crnClean].usedSeats += Number(studentsCount) || 20; // الافتراضي 20 إن لم يحدد
+              usage[crnClean].bundleIds.add(entityId);
+            }
+          }
+        };
+
+        checkPart(cell);
+        if (cell.sub2) checkPart(cell.sub2);
+      }
     }
   };
-  getDepts().forEach(d=>{
-    getSections(d.id).forEach(sec=>scan(getGrid(sec.id)));
-    getBundles(d.id).forEach(b=>scan(getBundleGrid(b.id)));
+
+  getDepts().forEach(d => {
+    getSections(d.id).forEach(sec => scan(getGrid(sec.id), sec.capacity || 40, sec.id));
+    getBundles(d.id).forEach(b => scan(getBundleGrid(b.id), b.students || 20, b.id));
   });
-  return used;
+
+  return usage;
 }
+  
 function findCellTypeByCrn(deptId,crn){
   if(!crn)return null;
   const scan=g=>{
