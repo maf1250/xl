@@ -2752,11 +2752,9 @@ function editProgrammerName(){
   // ══════════════════════════════════════════════════════════════
 // ══ دالة بناء واجهة جدول الشعب (تم دمج المعالج الذكي بشكل سليم) ══
 // ══════════════════════════════════════════════════════════════
-
 function gridTabHTML(deptId){
   let bundles = getBundles(deptId);
   const edit = canEdit(deptId);
-  // السماح بالتفاعل مع الجدول لرئيس الحاسب والدراسات في الأقسام الأخرى لإدارة مقرراتهم
   const canEditGrid = edit || (CU && CU.role === 'head' && (CU.dept === 'it' || CU.dept === 'sup' || getAllowSupEdit()));
 
   if (deptId === 'sup') {
@@ -2784,7 +2782,6 @@ function gridTabHTML(deptId){
 
   const specs = getSpecs(deptId);
   const secs = getSections(deptId);
-
   const hasSpecs = (deptId === 'sup' || deptId === 'it') ? getDepts().some(d => getSpecs(d.id).length > 0) : specs.length > 0;
 
   const bundleTabs=bundles.map(b=>{
@@ -2842,23 +2839,33 @@ function gridTabHTML(deptId){
   }
 
   const tabsWrap=bundles.length?`<div class="bundle-tabs-wrap">${bundleTabs}</div>`:'';
-  const missingRoomsCount2=countMissingRooms(deptId);
-  const missingRoomsByCourse2=missingRoomsCount2>0?getMissingRoomsByCourse(deptId):[];
+  
+  // 💡 التعديل الجذري هنا: جلب كل النواقص بدقة مع التفاصيل
+  const missingData = getMissingDataDetails(deptId);
+  const missingMsgs = formatMissingDataMessage(missingData);
+  const hasMissing = missingData.rooms.length > 0 || missingData.ins.length > 0 || missingData.crns.length > 0;
   
   const bulkBar=bundles.length?`<div style="margin-bottom:10px">
-    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button type="button" class="bpri" style="font-size:11px;padding:5px 10px;background:#7c3aed" onclick="printSectionsMenu('${deptId}')" title="يطبع جدول شعبة واحدة أو كل شعب القسم">🖨️ طباعة</button>
       <button type="button" class="bgr" style="font-size:11px;padding:5px 10px;background:#d97706;color:#fff" onclick="undoLastChange()" title="تراجع عن آخر خطوة">↩️ تراجع</button>
       <button type="button" class="bpri" style="font-size:11px;padding:5px 10px;background:#0369a1" onclick="downloadSectionsMenu('${deptId}')">📥 تنزيل</button>
-      <span class="badge ${missingRoomsCount2>0?'br':'bg'}" style="font-size:11px">🚪 ${missingRoomsCount2>0?missingRoomsCount2+' محاضرة بدون قاعة':'✅ كل المحاضرات لها قاعة'}</span>
-      <button type="button" class="bpu" style="font-size:11px;padding:5px 10px;background:#0d9488" onclick="autoAssignRooms('${deptId}')">🚪 توزيع القاعات تلقائياً</button>
+      
+      <!-- مؤشرات النواقص -->
+      <span class="badge ${missingData.rooms.length>0?'br':'bg'}" style="font-size:11px">🚪 ${missingData.rooms.length>0?missingData.rooms.length+' بدون قاعة':'✅ القاعات مكتملة'}</span>
+      <span class="badge ${missingData.ins.length>0?'br':'bg'}" style="font-size:11px">👤 ${missingData.ins.length>0?missingData.ins.length+' بدون مدرب':'✅ المدربون مكتملون'}</span>
+      <span class="badge ${missingData.crns.length>0?'br':'bg'}" style="font-size:11px">🔢 ${missingData.crns.length>0?missingData.crns.length+' بدون رقم مرجعي':'✅ الأرقام مكتملة'}</span>
+      
+      ${missingData.rooms.length>0 ? `<button type="button" class="bpu" style="font-size:11px;padding:5px 10px;background:#0d9488" onclick="autoAssignRooms('${deptId}')">🚪 توزيع القاعات تلقائياً</button>` : ''}
     </div>
-    ${missingRoomsByCourse2.length?`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:11.5px;color:#7f1d1d">
-      <strong>المقررات المتأثرة:</strong> ${missingRoomsByCourse2.map(m=>`${esc(m.course)} (${m.count})`).join('، ')}
+    
+    <!-- صندوق التفاصيل المتقدم -->
+    ${hasMissing?`<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px;font-size:11.5px;color:#7f1d1d;max-height:180px;overflow-y:auto;box-shadow:inset 0 2px 4px rgba(0,0,0,0.05)">
+      <strong style="display:block;margin-bottom:8px;font-size:13px;color:#991b1b">⚠️ تفاصيل النواقص في جداول هذا القسم:</strong> 
+      ${missingMsgs.join('')}
     </div>`:''}
   </div>`:'';
 
-  // المعالج الذكي (يظهر دائماً طالما لك صلاحية تعديل)
   const wizardBar = edit ? `<div style="margin-bottom:14px; padding:12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
       <div>
           <strong style="color:#1e40af; font-size:14px;">🤖 المعالج الذكي للتوزيع الشامل</strong>
@@ -4028,31 +4035,89 @@ function confirmAddSectionsFromLevel(){
 
 // ══ عدد المحاضرات بدون قاعة + توزيع القاعات تلقائياً ══
 // يجمع تفاصيل المحاضرات بدون قاعة — مقررات القسم فقط (يستبعد الدراسات العامة ومقررات الحاسب المشتركة)
-function getMissingRoomsDetails(deptId){
-  const sets=buildSupItNameSets();
-  const out=[];
-  function scan(entity,g,isB){
-    g.forEach((dayArr,di)=>dayArr.forEach((cell,pi)=>{
-      if(!cell)return;
-      if(cell.subj && !cell.roomId && isDeptOwnCourseName(cell.subj,sets,deptId)){
-          out.push({course:cell.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
-      }
-      if(cell.sub2 && cell.sub2.subj && !cell.sub2.roomId && isDeptOwnCourseName(cell.sub2.subj,sets,deptId)){
-          out.push({course:cell.sub2.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
-      }
-    }));
-  }
+// 💡 دوال تحليل النواقص الشاملة (قاعة، مدرب، رقم مرجعي) مع تحديد القسم والشعبة
+function getMissingDataDetails(deptId) {
+    const sets = buildSupItNameSets();
+    const out = { rooms: [], ins: [], crns: [] };
+    const allDepts = getDepts();
 
-  if (deptId === 'sup' || deptId === 'it') {
-      getDepts().forEach(d => {
-          getSections(d.id).forEach(sec=>scan(sec,getGrid(sec.id),false));
-          getBundles(d.id).forEach(b=>scan(b,getBundleGrid(b.id),true));
-      });
-  } else {
-      getSections(deptId).forEach(sec=>scan(sec,getGrid(sec.id),false));
-      getBundles(deptId).forEach(b=>scan(b,getBundleGrid(b.id),true));
-  }
-  return out;
+    function scan(entity, g, isB, actualDept) {
+        g.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
+            if (!cell) return;
+            
+            const processCell = (c, isSub2) => {
+                if (!c || !c.subj) return;
+                // التأكد من أن المقرر يخص القسم الذي يستعرض التقرير حالياً
+                if (!isDeptOwnCourseName(c.subj, sets, deptId)) return;
+                
+                const detail = {
+                    course: c.subj,
+                    deptName: actualDept.name || '',
+                    entityName: entity.name || entity.id,
+                };
+
+                // التحقق من النواقص
+                if (!c.roomId) out.rooms.push(detail);
+                if (!c.insId) out.ins.push(detail);
+                // الرقم المرجعي قد يكون في الخلية أو في الرزمة/الشعبة نفسها
+                if (!c.crn && !entity.crn) out.crns.push(detail); 
+            };
+
+            processCell(cell, false);
+            if (cell.sub2) processCell(cell.sub2, true);
+        }));
+    }
+
+    // إذا كان القسم دراسات عامة أو حاسب، ابحث في كل الأقسام، وإلا في قسمه فقط
+    if (deptId === 'sup' || deptId === 'it') {
+        allDepts.forEach(d => {
+            getSections(d.id).forEach(sec => scan(sec, getGrid(sec.id), false, d));
+            getBundles(d.id).forEach(b => scan(b, getBundleGrid(b.id), true, d));
+        });
+    } else {
+        const currentDept = allDepts.find(d => d.id === deptId) || {};
+        getSections(deptId).forEach(sec => scan(sec, getGrid(sec.id), false, currentDept));
+        getBundles(deptId).forEach(b => scan(b, getBundleGrid(b.id), true, currentDept));
+    }
+    return out;
+}
+
+function formatMissingDataMessage(missingData) {
+    const map = {}; 
+    const add = (list, type) => {
+        list.forEach(item => {
+            if (!map[item.course]) map[item.course] = { depts: {}, missing: { room: 0, ins: 0, crn: 0 } };
+            if (!map[item.course].depts[item.deptName]) map[item.course].depts[item.deptName] = new Set();
+            map[item.course].depts[item.deptName].add(item.entityName);
+            map[item.course].missing[type]++;
+        });
+    };
+
+    add(missingData.rooms, 'room');
+    add(missingData.ins, 'ins');
+    add(missingData.crns, 'crn');
+
+    const msgs = [];
+    Object.keys(map).sort().forEach(course => {
+        const data = map[course];
+        const types = [];
+        if (data.missing.room) types.push(`<b>${data.missing.room}</b> قاعة`);
+        if (data.missing.ins) types.push(`<b>${data.missing.ins}</b> مدرب`);
+        if (data.missing.crn) types.push(`<b>${data.missing.crn}</b> رقم مرجعي`);
+        
+        const locs = [];
+        Object.keys(data.depts).forEach(dName => {
+            locs.push(`<span style="color:#0369a1">[${esc(dName)}: <span style="color:#475569">${Array.from(data.depts[dName]).map(esc).join('، ')}</span>]</span>`);
+        });
+
+        msgs.push(`<div style="margin-bottom:6px;padding-bottom:6px;border-bottom:1px dashed #fca5a5">
+            <strong style="color:#b91c1c">${esc(course)}</strong> 
+            <span style="font-size:10px;background:#fee2e2;color:#dc2626;padding:2px 6px;border-radius:12px;margin:0 6px">ناقص: ${types.join('، ')}</span>
+            <div style="font-size:11px;margin-top:4px">⬅️ ${locs.join(' ')}</div>
+        </div>`);
+    });
+
+    return msgs;
 }
 function countMissingRooms(deptId){
   return getMissingRoomsDetails(deptId).length;
