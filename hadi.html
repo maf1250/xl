@@ -1691,15 +1691,43 @@ function _refreshPoolsForSubj(dId,subjName){
 // بدل الافتراضي الثابت (ساعتان دائماً): نأخذ ساعات الاتصال المعتمدة للمقرر، ونطرح منها ما هو مجدول
 // فعلاً بلقاءات أخرى لنفس المقرر بنفس الشعبة/الرزمة، والباقي (بحد أقصى ساعتان للقاء الواحد) هو المدة
 // المقترحة لهذه الخلية. مثال: مقرر 3 ساعات → اللقاء الأول 2 ساعة، واللقاء الثاني 1 ساعة تلقائياً.
+// دالة حساب الساعات الفعلية (مع تطبيق استثناء الفيزياء)
 function planContactHoursByName(){
   const map={};
-  try{getEnrollmentData().forEach(sp=>(sp.courses||[]).forEach(c=>{if(c.name&&c.ch)map[c.name]=parseInt(c.ch)||0;}));}catch(e){}
+  try{getEnrollmentData().forEach(sp=>(sp.courses||[]).forEach(c=>{
+      if(c.name&&c.ch) {
+          let ch = parseInt(c.ch)||0;
+          if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) ch = 2; // إجبار على ساعتين
+          map[c.name]=ch;
+      }
+  }));}catch(e){}
   getDepts().forEach(d=>getSpecs(d.id).forEach(sp=>getPlan(d.id,sp.id).forEach(c=>{
     if(!c.name||map[c.name])return;
-    const ch=parseInt(c.ch)||((parseInt(c.lecture)||0)+(parseInt(c.practical)||0)+(parseInt(c.training)||0))||parseInt(c.credit)||0;
+    let ch=parseInt(c.ch)||((parseInt(c.lecture)||0)+(parseInt(c.practical)||0)+(parseInt(c.training)||0))||parseInt(c.credit)||0;
+    if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) ch = 2; // إجبار على ساعتين
     if(ch>0)map[c.name]=ch;
   })));
   return map;
+}
+
+// منع إضافة مقرر إذا اكتمل عدد لقاءاته
+function isCourseLimitReached(dId, entityId, isBundle, subjName, oldSubj) {
+    if (!subjName || subjName === oldSubj) return false;
+    let courseObj = null;
+    getDepts().forEach(d => getSpecs(d.id).forEach(sp => getPlan(d.id, sp.id).forEach(c => {
+        if (c.name === subjName) courseObj = c;
+    })));
+    if (!courseObj) return false; // إذا لم يُعرف المقرر، اسمح به
+
+    let sNeeded = sessionsNeeded(courseObj);
+    let sScheduled = 0;
+    const g = isBundle ? getBundleGrid(entityId) : getGrid(entityId);
+    g.forEach(day => day.forEach(cell => {
+        if (cell && cell.subj === subjName) sScheduled++;
+        if (cell && cell.sub2 && cell.sub2.subj === subjName) sScheduled++;
+    }));
+
+    return sScheduled >= sNeeded;
 }
 // ساعات خلية واحدة: المدة المحفوظة إن وُجدت، وإلا ساعة لنصف المحاضرة وساعتان للمحاضرة الكاملة
 function cellHoursOf(cell){
@@ -2149,16 +2177,18 @@ function saveBundleCellModal(){
   const ctx=currentCell||currentBundleCell;
 // --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
   if (ctx && CU && CU.role === 'head') {
+     if (ctx && subj) {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
       const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
       const existingCell = g[ctx.di] && g[ctx.di][ctx.pi];
-      let existingSubj = '';
-      if(ctx.subSlot === 'sub2'){
-          existingSubj = existingCell && existingCell.sub2 ? existingCell.sub2.subj : '';
-      } else {
-          existingSubj = existingCell ? existingCell.subj : '';
+      const oldSubj = (ctx.subSlot === 'sub2') ? (existingCell && existingCell.sub2 ? existingCell.sub2.subj : '') : (existingCell ? existingCell.subj : '');
+      
+      if (isCourseLimitReached(ctx.deptId, entityId, isB, subj, oldSubj)) {
+          showToastMsg(`⛔ لا يمكن حفظ "${subj}". لقد اكتمل العدد المطلوب بالجدول.`);
+          return;
       }
+  }
 
       const sets = buildSupItNameSets();
       const getCourseType = (sName) => {
@@ -11480,7 +11510,6 @@ window.applyWizardSS07Mapping = function(dId) {
     try {
         if (!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
 
-        const isServiceDept = (dId === 'sup' || dId === 'it');
         const P = getPeriods();
         const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
         let bundleGlobalIdx = 0;
@@ -11543,7 +11572,6 @@ window.applyWizardSS07Mapping = function(dId) {
 
         const rooms = getRooms(dId);
         const chByName = planContactHoursByName();
-        let totalPlaced = 0;
 
         const configsByDept = {};
         levelsConfig.forEach(conf => {
@@ -11573,18 +11601,14 @@ window.applyWizardSS07Mapping = function(dId) {
                 const plan = getPlan(targetDeptId, conf.specId);
                 const rawCourses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
                 
-                // 🛡️ تصفية المقررات المكررة في الخطة
                 const uniqueCoursesMap = new Map();
                 rawCourses.forEach(c => {
-                    const key = (c.code || c.name).trim(); 
-                    if (!uniqueCoursesMap.has(key)) {
-                        uniqueCoursesMap.set(key, c);
-                    }
+                    const key = (c.name).trim(); 
+                    if (!uniqueCoursesMap.has(key)) uniqueCoursesMap.set(key, c);
                 });
                 const courses = Array.from(uniqueCoursesMap.values());
 
                 if(courses.length === 0) return;
-
                 courses.sort((a,b) => (chByName[b.name]||2) - (chByName[a.name]||2));
 
                 for (let i = 0; i < conf.count; i++) {
@@ -11593,25 +11617,17 @@ window.applyWizardSS07Mapping = function(dId) {
 
                     let bundleOffDay = null;
                     if (compress4Days) {
-                        bundleOffDay = bundleGlobalIdx % 5;
+                        bundleOffDay = bundleGlobalIdx % DAYS.length;
                         bundleGlobalIdx++;
                     }
 
+                    // تنظيف الجدول من المقررات التابعة لي قبل التوزيع الجديد
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
                         if (cell) {
                             const mainMine = isCourseMyResponsibility(cell, targetDeptId);
                             const sub2Mine = cell.sub2 ? isCourseMyResponsibility(cell.sub2, targetDeptId) : false;
-
                             if (mainMine && !sub2Mine && cell.sub2) {
-                                bGrid[di][pi] = {
-                                    subj: cell.sub2.subj,
-                                    insId: cell.sub2.insId,
-                                    roomId: cell.sub2.roomId,
-                                    crn: cell.sub2.crn,
-                                    duration: cell.sub2.duration,
-                                    halfOnly: true,
-                                    cellType: cell.sub2.cellType
-                                };
+                                bGrid[di][pi] = { subj: cell.sub2.subj, insId: cell.sub2.insId, roomId: cell.sub2.roomId, crn: cell.sub2.crn, duration: cell.sub2.duration, halfOnly: true, cellType: cell.sub2.cellType };
                             } else if (!mainMine && sub2Mine) {
                                 delete cell.sub2;
                             } else if (mainMine) {
@@ -11626,53 +11642,65 @@ window.applyWizardSS07Mapping = function(dId) {
                         return load;
                     };
 
+                    const getCoursePlacedCount = (cName) => {
+                        let cnt = 0;
+                        bGrid.forEach(day => day.forEach(cell => {
+                            if (cell && cell.subj === cName) cnt++;
+                            if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++;
+                        }));
+                        return cnt;
+                    };
+
                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
                         
-                        if (isPhysicsExempt && (c.name.includes('عملي') || c.name.includes('مختبر') || c.name.includes('معمل'))) return;
-
                         if (isPhysicsExempt) {
                             sessionsNeeded = 1;
-                            cHours = 2;
+                            cHours = 2; // إجبار الساعات على 2
                         }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         
+                        // 🛡️ درع حماية قوي: إذا كان المقرر قد تم استيفاء عدد حصصه مسبقاً، تجاوزه فوراً
+                        let currentPlaced = getCoursePlacedCount(c.name);
+                        if (currentPlaced >= sessionsNeeded) return;
+                        
+                        const sessionsToPlace = sessionsNeeded - currentPlaced;
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
 
-                        for (let sess = 0; sess < sessionsNeeded; sess++) {
-                            const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
+                        for (let sess = 0; sess < sessionsToPlace; sess++) {
+                            const isHalf = isSplitCourse && (currentPlaced + sess) === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
-                            let placed = false;
                                                     
                             let candidateDays = [0, 1, 2, 3, 4].filter(d => !usedDaysForCourse.has(d));
                             let preferredDays = candidateDays.filter(d => d !== bundleOffDay);
                             let fallbackDays = candidateDays.filter(d => d === bundleOffDay);
 
-                            // تجميع المحاضرات في نفس الأيام وتجنب الفراغات قدر الإمكان
                             preferredDays.sort((a, b) => {
                                 const loadA = getDayLoad(a);
                                 const loadB = getDayLoad(b);
-                                if (loadA !== loadB) return loadB - loadA; 
+                                if (loadA !== loadB) return loadB - loadA; // الأيام الممتلئة أولاً لتقليل الفراغات
                                 return Math.random() - 0.5;
                             });
 
                             let finalDays = [...preferredDays, ...fallbackDays];
                             const prioritizedPeriods = [...Array(P.length).keys()].sort((a, b) => a - b); 
 
+                            // 💥 التعديل الجذري: قلب طريقة البحث! 
+                            // ابحث في م1 في كل الأيام، ثم م2 في كل الأيام لضمان التعبئة الصباحية وعدم التأخير
                             outerLoop:
-                            for (let di of finalDays) {
-                                // 🛡️ درع الحماية من التكدس: منع تجاوز 6 ساعات في اليوم إلا كملاذ أخير
-                                if (getDayLoad(di) >= 3 && finalDays.some(d => getDayLoad(d) < 3)) {
-                                    continue; // ننتقل لليوم التالي لتجنب التكديس
-                                }
+                            for (let pi of prioritizedPeriods) { 
+                                for (let di of finalDays) {
+                                    // منع تجاوز 3 محاضرات (6 ساعات) في اليوم إلا كملاذ أخير للوقت المتأخر
+                                    if (pi < 3 && getDayLoad(di) >= 3 && finalDays.some(d => getDayLoad(d) < 3)) {
+                                        continue; 
+                                    }
 
-                                for (let pi of prioritizedPeriods) { 
                                     const timeKey = `${di}_${pi}`;
                                     
                                     if (bGrid[di][pi]) continue;
@@ -11719,8 +11747,6 @@ window.applyWizardSS07Mapping = function(dId) {
                                         }
 
                                         usedDaysForCourse.add(di); 
-                                        placed = true;
-                                        totalPlaced++;
                                         break outerLoop;
                                     }
                                 }
@@ -11738,14 +11764,14 @@ window.applyWizardSS07Mapping = function(dId) {
         document.getElementById('autoDistWizardModal').style.display = 'none';
         renderDeptTabContent(dId);
         
-        showToastMsg(`✅ اكتمل التوزيع بنجاح! تم ضغط الجدول في الصباح وتقليل الفراغات.`);
+        showToastMsg(`✅ اكتمل التوزيع بنجاح! تم ضغط الجدول في الصباح وتصحيح استثناء الفيزياء.`);
 
     } catch (err) {
         alert('حدث خطأ أثناء تنفيذ التوزيع: ' + err.message);
         console.error(err);
     }
 };
-
+  
 // =========================================================================
 // ══ معالج رفع تقارير الوحدة التدريبية الشامل (للأدمن والوكيل) - المطور ══
 // =========================================================================
