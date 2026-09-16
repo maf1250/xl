@@ -3816,71 +3816,105 @@ window.renderBundleGrid = function(deptId,bundle,editable){
     linkedGroups[baseName].push(c);
   });
 
-  const legendRows=(()=>{
-  const usedCrns=collectUsedCrnsAllDepts();
-  return courses.map((c,i)=>{
-    const color=COURSE_COLORS[i%COURSE_COLORS.length];
-    const needed=sessionsNeeded(c);
-    const theoryN=theorySessionsNeeded(c);
-    const practN=practSessionsNeeded(c);
-    const scheduled=sessionsScheduled(bundleId,c.name);
-    const ok=scheduled>=needed;
-    const remaining=Math.max(0,needed-scheduled);
-    const linkedSecs=getSections(deptId).filter(s=>s.name===c.name && s.specId===specId && s.level===level && s.crn && !usedCrns.has(s.crn));
-    const allLinked=linkedSecs.length?linkedSecs:getSections(deptId).filter(s=>s.name===c.name && s.crn && !usedCrns.has(s.crn));
-    const crnChips=allLinked.map(s=>{
-      const linkedCrn=getLinkedCrn(deptId,s.crn);
-      const linkBadge=linkedCrn?`<span style="font-size:8px;background:#ede9fe;color:#6d28d9;border-radius:3px;padding:0 3px;margin-right:2px" title="مرتبط بـ ${esc(linkedCrn)}">🔗${esc(linkedCrn)}</span>`:'';
-      const resolved=resolveCrnType(deptId,s.crn);
-      const chipStyle=resolved.type?`style="color:${cellTypeColor(resolved.type)};border-color:${cellTypeColor(resolved.type)}"`:'';
-      const chipTitle=resolved.type?`نوع المحاضرة (${resolved.source==='banner'?'حسب ملف رايات':'مضبوط بالجدول'}): ${cellTypeLabel(resolved.type)} — انقر لاختيار الرقم`:'انقر لاختيار الرقم';
-      return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${deptId}')" ${chipStyle} title="${chipTitle}">🔢 ${esc(s.crn)}${linkBadge}</span>`;
-    }).join('');
-    const canManageCourse = canUserManageCourse(c.name, c.cat, bundle.deptId || deptId);
-    const dragChip = (editable && canManageCourse)
-      ? `<span class="course-chip" draggable="true" ondragstart="dragCourseChip(event,this)" data-course="${esc(c.name)}" style="background:${color};color:#fff;cursor:grab" title="اسحب للجدول">⠇ اسحب</span>`
-      : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;font-size:10px;padding:3px 6px" title="مقرر محمي يتبع لقسم آخر">🔒 محمي</span>`;    const counter=`<span class="badge ${ok?'bg':'br'}">${scheduled}/${needed}</span>`;
+const legendRows = (() => {
+    const usedCrns = collectUsedCrnsAllDepts();
+    
+    // جمع كل الشُعب من كافة أقسام الكلية لتسهيل استخراج أرقامها بغض النظر عن القسم
+    const allCollegeSections = [];
+    getDepts().forEach(d => {
+        getSections(d.id).forEach(s => allCollegeSections.push({...s, _dId: d.id}));
+    });
 
-    const catBadge=c.cat==='sup'
-      ?`<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">📚 دراسات عامة</span>`
-      :c.cat==='comp'
-      ?`<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">💻 حاسب</span>`:'';
+    return courses.map((c, i) => {
+      const color = COURSE_COLORS[i % COURSE_COLORS.length];
+      const needed = sessionsNeeded(c);
+      const theoryN = theorySessionsNeeded(c);
+      const practN = practSessionsNeeded(c);
+      const scheduled = sessionsScheduled(bundleId, c.name);
+      const ok = (scheduled >= needed);
+      const remaining = Math.max(0, needed - scheduled);
 
-    let am=parseInt(c.am)||parseInt(c.practical)||0;
-    if(getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) am = 0;
-    const theoryHrs=(parseInt(c.mh)||parseInt(c.lecture)||0)+(parseInt(c.tm)||parseInt(c.training)||0);
-    const capT=c.capTheory||40;
-    const capP=c.capPract||20;
-    const needsMultiSec=am>0&&capP<capT;
+      // مطابقة ذكية تعتمد على رمز المقرر (Code) كأولوية قصوى، ثم الاسم كاحتياط عبر كل الكلية
+      const targetCodeNorm = c.code ? normCode(c.code) : '';
+      const targetNameNorm = normName(c.name);
 
-    const detailHtml=`<div style="font-size:9px;margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-      ${theoryN>0?`<span style="background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px;font-weight:700">ن: ${theoryN} لقاء (×40)</span>`:''}
-      ${practN>0?`<span style="background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:4px;font-weight:700">ع: ${practN} لقاء (×20)</span>`:''}
-      ${needsMultiSec?`<span style="background:#fef9c3;color:#854d0e;padding:1px 5px;border-radius:4px;font-weight:700">⚡ لكل شعبة نظرية → ${Math.ceil(capT/capP)} شعبة عملية (ن:${capT}، ع:${capP})</span>`:''}
-    </div>`;
+      const allLinked = allCollegeSections.filter(s => {
+          const sCodeNorm = s.code ? normCode(s.code) : '';
+          const sNameNorm = normName(s.name);
+          
+          let isMatch = false;
+          if (targetCodeNorm && sCodeNorm) {
+              isMatch = (sCodeNorm === targetCodeNorm);
+          } else if (targetCodeNorm && s.name) {
+              // استخراج الرمز من اسم الشعبة إن لم يكن مخزناً في s.code
+              const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
+              if (m && normCode(m[1]) === targetCodeNorm) isMatch = true;
+          }
+          
+          // احتياط بالاسم إذا تعذر الرمز
+          if (!isMatch) {
+              isMatch = (sNameNorm === targetNameNorm || sNameNorm.includes(targetNameNorm) || targetNameNorm.includes(sNameNorm));
+          }
 
-    const warningHtml=!ok?`<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>`:'';
+          return isMatch && s.crn && !usedCrns.has(s.crn);
+      });
 
-    let displayHours = c.ch || c.total || '—';
-    if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) {
-        displayHours = '2'; 
-    }
+      const crnChips = allLinked.map(s => {
+        const linkedCrn = getLinkedCrn(s._dId || deptId, s.crn);
+        const linkBadge = linkedCrn ? `<span style="font-size:8px;background:#ede9fe;color:#6d28d9;border-radius:3px;padding:0 3px;margin-right:2px" title="مرتبط بـ ${esc(linkedCrn)}">🔗${esc(linkedCrn)}</span>` : '';
+        const resolved = resolveCrnType(s._dId || deptId, s.crn);
+        const chipStyle = resolved.type ? `style="color:${cellTypeColor(resolved.type)};border-color:${cellTypeColor(resolved.type)}"` : '';
+        const chipTitle = resolved.type ? `نوع المحاضرة (${resolved.source==='banner'?'حسب ملف رايات':'مضبوط بالجدول'}): ${cellTypeLabel(resolved.type)} — انقر لاختيار الرقم` : 'انقر لاختيار الرقم';
+        return `<span class="legend-crn-chip" onclick="fillCrnFromLegend('${esc(s.crn)}','${esc(c.name)}','${s._dId || deptId}')" ${chipStyle} title="${chipTitle}">🔢 ${esc(s.crn)}${linkBadge}</span>`;
+      }).join('');
 
-    const rowStyle=c.cat==='sup'?'background:#fffbeb':c.cat==='comp'?'background:#f5f3ff':'';
-    return `<tr class="legend-row" style="${rowStyle}">
-      <td><span style="display:inline-block;width:12px;height:12px;background:${color};border-radius:3px;vertical-align:middle"></span></td>
-      <td class="legend-name-cell">
-  ${catBadge}
-  ${c.code ? `<span style="font-family:monospace;background:#f1f5f9;color:#1e40af;border:1px solid #cbd5e1;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;margin-left:5px">${esc(c.code)}</span>` : ''}
-  <strong>${esc(c.name)}</strong>
-  ${detailHtml}${warningHtml}
-</td>
-      <td class="legend-hours-cell">${needed} لقاء<br/><span style="font-size:9px;color:var(--mu)">${displayHours} سا</span></td>
-      <td class="legend-crns-cell">${crnChips||'<span style="color:var(--mu);font-size:10px">—</span>'}</td>
-      <td>${counter}</td>
-      <td>${dragChip}</td>
-    </tr>`;
-  }).join('');
+      const canManageCourse = canUserManageCourse(c.name, c.cat, bundle.deptId || deptId);
+      const dragChip = (editable && canManageCourse)
+        ? `<span class="course-chip" draggable="true" ondragstart="dragCourseChip(event,this)" data-course="${esc(c.name)}" style="background:${color};color:#fff;cursor:grab" title="اسحب للجدول">⠇ اسحب</span>`
+        : `<span class="badge" style="background:#f1f5f9;color:#94a3b8;border:1px solid #cbd5e1;font-size:10px;padding:3px 6px" title="مقرر محمي يتبع لقسم آخر">🔒 محمي</span>`;    
+      
+      const counter = `<span class="badge ${ok?'bg':'br'}">${scheduled}/${needed}</span>`;
+
+      const catBadge = c.cat === 'sup'
+        ? `<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">📚 دراسات عامة</span>`
+        : c.cat === 'comp'
+        ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;margin-right:4px">💻 حاسب</span>` : '';
+
+      let am = parseInt(c.am) || parseInt(c.practical) || 0;
+      if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) am = 0;
+      const theoryHrs = (parseInt(c.mh) || parseInt(c.lecture) || 0) + (parseInt(c.tm) || parseInt(c.training) || 0);
+      const capT = c.capTheory || 40;
+      const capP = c.capPract || 20;
+      const needsMultiSec = am > 0 && capP < capT;
+
+      const detailHtml = `<div style="font-size:9px;margin-top:2px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+        ${theoryN > 0 ? `<span style="background:#dbeafe;color:#1d4ed8;padding:1px 5px;border-radius:4px;font-weight:700">ن: ${theoryN} لقاء (×40)</span>` : ''}
+        ${practN > 0 ? `<span style="background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:4px;font-weight:700">ع: ${practN} لقاء (×20)</span>` : ''}
+        ${needsMultiSec ? `<span style="background:#fef9c3;color:#854d0e;padding:1px 5px;border-radius:4px;font-weight:700">⚡ لكل شعبة نظرية → ${Math.ceil(capT/capP)} شعبة عملية (ن:${capT}، ع:${capP})</span>` : ''}
+      </div>`;
+
+      const warningHtml = !ok ? `<div style="font-size:9px;font-weight:700;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:1px 6px;margin-top:2px;display:inline-block">⚠️ ناقص ${remaining} لقاء</div>` : '';
+
+      let displayHours = c.ch || c.total || '—';
+      if (getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code)) {
+          displayHours = '2'; 
+      }
+
+      const rowStyle = c.cat === 'sup' ? 'background:#fffbeb' : c.cat === 'comp' ? 'background:#f5f3ff' : '';
+      return `<tr class="legend-row" style="${rowStyle}">
+        <td><span style="display:inline-block;width:12px;height:12px;background:${color};border-radius:3px;vertical-align:middle"></span></td>
+        <td class="legend-name-cell">
+          ${catBadge}
+          ${c.code ? `<span style="font-family:monospace;background:#f1f5f9;color:#1e40af;border:1px solid #cbd5e1;padding:1px 6px;border-radius:4px;font-size:11px;font-weight:700;margin-left:5px">${esc(c.code)}</span>` : ''}
+          <strong>${esc(c.name)}</strong>
+          ${detailHtml}${warningHtml}
+        </td>
+        <td class="legend-hours-cell">${needed} لقاء<br/><span style="font-size:9px;color:var(--mu)">${displayHours} سا</span></td>
+        <td class="legend-crns-cell">${crnChips || '<span style="color:var(--mu);font-size:10px">—</span>'}</td>
+        <td>${counter}</td>
+        <td>${dragChip}</td>
+      </tr>`;
+    });
   })();
 
   const legend=`<div style="overflow-x:auto;margin-bottom:4px">
