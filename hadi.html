@@ -2163,7 +2163,8 @@ function undoLastChange(){
   showToastMsg('↩️ تم التراجع عن آخر تعديل');
   if(typeof currentDept!=='undefined'&&currentDept)renderDeptTabContent(currentDept);
 }
-function saveBundleCellModal(){
+
+  function saveBundleCellModal(){
   const subj=(document.getElementById('cm-subj').value||'').trim();
   const insId=(document.getElementById('cm-ins').value||'');
   const roomId=(document.getElementById('cm-room').value||'');
@@ -2189,20 +2190,19 @@ function saveBundleCellModal(){
           return;
       }
   }
-// --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
+
+  // --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
   if (ctx && CU && CU.role === 'head') {
-     if (ctx && subj) {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
       const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
       const existingCell = g[ctx.di] && g[ctx.di][ctx.pi];
-      const oldSubj = (ctx.subSlot === 'sub2') ? (existingCell && existingCell.sub2 ? existingCell.sub2.subj : '') : (existingCell ? existingCell.subj : '');
-      
-      if (isCourseLimitReached(ctx.deptId, entityId, isB, subj, oldSubj)) {
-          showToastMsg(`⛔ لا يمكن حفظ "${subj}". لقد اكتمل العدد المطلوب بالجدول.`);
-          return;
+      let existingSubj = '';
+      if(ctx.subSlot === 'sub2'){
+          existingSubj = existingCell && existingCell.sub2 ? existingCell.sub2.subj : '';
+      } else {
+          existingSubj = existingCell ? existingCell.subj : '';
       }
-  }
 
       const sets = buildSupItNameSets();
       const getCourseType = (sName) => {
@@ -2215,9 +2215,8 @@ function saveBundleCellModal(){
 
       const subjType = getCourseType(subj);
       const existingSubjType = getCourseType(existingSubj);
-      const hasIT = getDepts().some(d => d.id === 'it');
 
-   // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
+      // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
       if (CU.dept === 'sup') {
           if (subj && subjType !== 'sup' && !(subjType === 'comp' && getAllowSupEditComp())) {
               showToastMsg('⛔ بصفتك رئيس قسم الدراسات العامة، يمكنك فقط إسناد مقررات الدراسات العامة.');
@@ -2249,7 +2248,8 @@ function saveBundleCellModal(){
           }
       }
   }
-  // تدقيق: لو مدير النظام استخدم "التجاوز" واختار مدرباً من خارج قسم المقرر الأصلي، سجّل الحركة
+
+  // تدقيق: لو مدير النظام استخدم "التجاوز"
   if(insVal&&subj&&ctx&&CU&&CU.role==='admin'){
     const poolDept=getCoursePoolDept(subj,ctx.deptId);
     const chosenInsDept=(getDepts().find(d=>getInstructors(d.id).find(i=>i.id===insVal))||{}).id;
@@ -2258,6 +2258,7 @@ function saveBundleCellModal(){
       logAuditEntry({action:'تجاوز صلاحية إسناد مدرّب',course:subj,instructor:insObj.name||insVal,fromDept:deptName(chosenInsDept),expectedDept:deptName(poolDept),cellDept:deptName(ctx.deptId)});
     }
   }
+
   // حفظ في النصف الثاني (sub2)
   if(ctx&&ctx.subSlot==='sub2'){
     const {deptId,sectionId,bundleId,di,pi}=ctx;
@@ -2265,12 +2266,9 @@ function saveBundleCellModal(){
     const g=isB?getBundleGrid(entityId):getGrid(entityId);
     const cell=g[di]&&g[di][pi];
     if(cell&&subj){
-      // تحقق من تعارض المدرب: مع خلايا أخرى دائماً
       if(insVal){
         const conflict=findConflict(deptId,entityId,di,pi,insVal);
         if(conflict){showToastMsg('⚠️ تعارض — المدرب مشغول في: '+conflict.name);return;}
-        // تعارض مع النصف الأول من نفس الخلية: يُسمح فقط إذا كان كلا الجزأين بمدة ساعة واحدة (متتاليان وليسا متزامنين)
-        // ملاحظة: خلية الامتداد (extendedFrom) دائماً تشغل نصف ساعة واحدة فقط من وقتها، بصرف النظر عن duration المخزن
         const isOneHour=duration===1;
         const mainIsOneHour=(cell.duration||2)===1||cell.extendedFrom!==undefined;
         if(!(isOneHour&&mainIsOneHour)){
@@ -2285,6 +2283,7 @@ function saveBundleCellModal(){
     currentBundleCell=null;currentCell=null;
     closeModal('cellModal');renderDeptTabContent(currentDept);return;
   }
+
   // حفظ عادي
   if(insVal||duration===3||duration===4){
     const ctxDeptId=(currentCell&&currentCell.deptId)||(currentBundleCell&&currentBundleCell.deptId);
@@ -2298,7 +2297,6 @@ function saveBundleCellModal(){
         const sameCell=findConflictInSameCell(ctxDeptId,ctxEntityId,ctxDi,ctxPi,insVal,'main');
         if(sameCell){showToastMsg('⚠️ تعارض — المدرب نفسه مشغول في '+sameCell.name+' بمقرر: '+sameCell.subj);return;}
       }
-      // إذا كانت محاضرة 3 ساعات، تحقق أن المحاضرة التالية فارغة فعلاً
       if(duration===3||duration===4){
         const gCheck=currentCell?getGrid(ctxEntityId):getBundleGrid(ctxEntityId);
         const chk=canExtendToNextPeriod(gCheck,ctxDi,ctxPi,insVal);
@@ -2306,20 +2304,17 @@ function saveBundleCellModal(){
       }
     }
   }
+
   if(currentCell){
     const {sectionId,di,pi}=currentCell;const g=getGrid(sectionId);
     const existingCell=g[di][pi];
-    // إذا الخلية الحالية ممتدة من محاضرة سابقة ومشغول نصفها الأول، امنع تعيين مدرب مختلف على الخلية كاملة
     if(existingCell&&existingCell.extendedFrom!==undefined&&insVal&&insVal!==existingCell.insId&&duration!==3){
       showToastMsg('⚠️ هذه الخلية ممتدة من محاضرة سابقة — استخدم "مقرر في النصف الآخر" بدلاً من ذلك');return;
     }
     g[di][pi]=(!subj&&!insVal&&!roomVal)?null:{subj,insId:insVal,roomId:roomVal,crn,extra:extra||undefined,extraCh:extraCh,duration:duration!==2?duration:undefined,cellType:cellType||undefined};
     if(subj&&(duration===3||duration===4))extendToNextPeriod(g,di,pi,{subj,insId:insVal,roomId:roomVal,crn},duration);
-    // مزامنة: بقية لقاءات نفس المقرر بهذه الشعبة (مع فحص التعارض) — حتى لا تحتاج تفتح كل لقاء لحاله
     if(subj&&(crn||insVal)){
       const sectionDeptId=currentCell.deptId;
-      // تأكد إن المدرّب من نفس قسم المقرر الصحيح قبل النشر التلقائي — لا نسمح بنشر مدرّب تم اختياره
-      // بتجاوز صلاحية إدارية (لقسم مختلف) على خلايا أخرى دون فحص تجاوز جديد لكل واحدة
       const poolDeptForSubj=insVal?getCoursePoolDept(subj,sectionDeptId):null;
       const insValInPool=insVal?!!getInstructors(poolDeptForSubj).find(i=>i.id===insVal):false;
       g.forEach((dayArr,d)=>dayArr.forEach((cell,p)=>{
@@ -2343,9 +2338,7 @@ function saveBundleCellModal(){
     }
     g[di][pi]=(!subj&&!insVal)?null:{subj,insId:insVal,roomId:roomVal,crn,extra:extra||undefined,extraCh:extraCh,duration:duration!==2?duration:undefined,cellType:cellType||undefined};
     if(subj&&(duration===3||duration===4))extendToNextPeriod(g,di,pi,{subj,insId:insVal,roomId:roomVal,crn},duration);
-    // مزامنة: بقية لقاءات نفس المقرر (مع فحص التعارض)
     if(subj&&(crn||insVal)){
-      // نفس فحص القسم الصحيح للمدرّب قبل النشر التلقائي (انظر نفس الفحص بالشعب العادية أعلاه)
       const poolDeptForSubj2=insVal?getCoursePoolDept(subj,bundleDeptId):null;
       const insValInPool2=insVal?!!getInstructors(poolDeptForSubj2).find(i=>i.id===insVal):false;
       g.forEach((dayArr,d)=>dayArr.forEach((cell,p)=>{
@@ -2364,6 +2357,8 @@ function saveBundleCellModal(){
   }
   closeModal('cellModal');renderDeptTabContent(currentDept);
 }
+
+
 function clearBundleCellModal(){
   const ctx = currentCell || currentBundleCell;
   if (!ctx) return;
@@ -2392,14 +2387,12 @@ function clearBundleCellModal(){
 
       const existingSubjType = getCourseType(existingSubj);
 
-      // 1. رئيس قسم الدراسات العامة: ممنوع يحذف مادة تخصصية
       if (CU.dept === 'sup') {
           if (existingSubj && existingSubjType !== 'sup' && !(existingSubjType === 'comp' && getAllowSupEditComp())) {
               showToastMsg('⛔ لا يمكنك حذف مقرر تخصصي تابع لقسم آخر.');
               return;
           }
       } 
-      // 2. رئيس القسم التخصصي: ممنوع يحذف مادة دراسات عامة إلا بصلاحية
       else {
           if (!getAllowSupEdit()) {
               if (existingSubjType === 'sup') {
@@ -2415,14 +2408,12 @@ function clearBundleCellModal(){
   const entityId = ctx.sectionId || ctx.bundleId;
   const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
   const wasCell = g[ctx.di] && g[ctx.di][ctx.pi];
+  
+  pushUndoState(entityId, isB); // 💡 حفظ الحالة قبل الحذف للتراجع
 
   if (ctx.subSlot === 'sub2') {
-      // مسح النصف الثاني فقط في حال وجوده
-      if (wasCell && wasCell.sub2) {
-          delete wasCell.sub2;
-      }
+      if (wasCell && wasCell.sub2) delete wasCell.sub2;
   } else {
-      // مسح الخلية الأساسية
       g[ctx.di][ctx.pi] = null;
       if (wasCell && (wasCell.duration === 3 || wasCell.duration === 4)) {
           clearExtendedCell(g, ctx.di, ctx.pi);
@@ -3781,10 +3772,9 @@ window.renderBundleGrid = function(deptId,bundle,editable){
   const totalScheduled=courses.reduce((s,c)=>s+sessionsScheduled(bundleId,c.name),0);
   const allOk=totalScheduled>=totalNeeded;
   const summaryBadge=`<span class="badge ${allOk?'bg':'br'}" style="font-size:12px">${totalScheduled}/${totalNeeded} لقاء مجدول</span>`;
-  const bundleObj=getBundles(deptId).find(b=>b.id===bundleId)||{};
-  const crnDisplay=bundleObj.crn?`<span class="badge bp">🔢 ${esc(bundleObj.crn)}</span>`:`<span class="badge br" style="cursor:pointer" onclick="editBundleCrn('${deptId}','${bundleId}')" title="مثال توضيحي على الصيغة: 1790404AA">🔢 أضف رقماً مرجعياً لـ${esc(bundleObj.name||'الرزمة')} (مثال: 1790404AA)</span>`;
-  const studentsDisplay=bundleObj.students?`<span class="badge bg" style="cursor:pointer" onclick="editBundleStudents('${deptId}','${bundleId}')">👥 ${esc(bundleObj.students)} متدرب</span>`:`<span class="badge br" style="cursor:pointer" onclick="editBundleStudents('${deptId}','${bundleId}')">👥 أضف عدد المتدربين</span>`;
-  
+   const bundleObj = getBundles(deptId).find(b=>b.id===bundleId) || {};
+  const crnDisplay = `<span class="badge ${bundleObj.crn?'bp':'br'}" style="cursor:pointer;font-size:11px" onclick="openEditBundleCrnModal('${deptId}','${bundleId}')" title="تعديل الرقم المرجعي للرزمة">🔢 ${bundleObj.crn ? esc(bundleObj.crn) : 'أضف رقماً مرجعياً للرزمة'}</span>`;
+  const studentsDisplay = `<span class="badge ${bundleObj.students?'bg':'br'}" style="cursor:pointer;font-size:11px" onclick="openEditBundleStudentsModal('${deptId}','${bundleId}')">👥 ${bundleObj.students ? esc(bundleObj.students) + ' متدرب' : 'أضف عدد المتدربين'}</span>`;  
   // 🔥 التعديل: إزالة الأزرار الزائدة من الترويسة والاكتفاء بمسح المدربين إن كان موجوداً
   return `
   <div class="panel">
@@ -11427,158 +11417,101 @@ function runCrnCheck(){
   });
 }
 
-window.openAutoDistWizard = function(dId) {
-    try {
-        const isSup = (dId === 'sup');
-        const isIt = (dId === 'it');
-
-        const departmentsToScan = isSup 
-            ? getDepts().filter(d => d.id !== 'sup') 
-            : [getDepts().find(d => d.id === dId)].filter(Boolean);
-        
-        const totalSpecs = departmentsToScan.reduce((acc, d) => acc + getSpecs(d.id).length, 0);
-        if (totalSpecs === 0) {
-            showToastMsg('⚠️ لا توجد خطط وتخصصات معتمدة في الأقسام لتوزيعها.');
-            return;
-        }
-
-        let modal = document.getElementById('autoDistWizardModal');
-        if (!modal) {
-            modal = document.createElement('div');
-            modal.id = 'autoDistWizardModal';
-            modal.className = 'modal-overlay';
-            document.body.appendChild(modal);
-        }
-
-function isCourseMyResponsibility(c, targetDeptId) {
-            const cName = c.name || c.subj || '';
-            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
-            
-            // إذا كان الخيار مفعلاً وهناك مقرر مستقل مخصص للعملي، نتجاهله
-            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('معمل'))) {
-                return false;
-            }
-
-            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
-            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
-            return cCat === 'dept'; 
-        }
-        
-        // تجميع المقررات مع التمييز بالرمز (Code) لمنع دمج المقررات متطابقة الاسم
-        const allCoursesMap = new Map();
-        departmentsToScan.forEach(dept => {
-            getSpecs(dept.id).forEach(sp => {
-                getPlan(dept.id, sp.id).forEach(c => {
-                    if (isCourseMyResponsibility(c, dept.id)) {
-                        const uniqueKey = (c.code || c.name).trim();
-                        if (!allCoursesMap.has(uniqueKey)) {
-                            allCoursesMap.set(uniqueKey, c);
-                        }
-                    }
-                });
-            });
-        });
-        
-        const uniqueCourses = Array.from(allCoursesMap.values()).sort((a,b) => (a.code||a.name).localeCompare(b.code||b.name, 'ar'));
-
-        if(uniqueCourses.length === 0) {
-             showToastMsg('⚠️ لا توجد مقررات مخصصة لقسمك في الخطط المعتمدة.');
-             return;
-        }
-
-        // 1. بناء واجهة المستويات (عرض الرموز بدلاً من الأسماء لمنع اللبس)
-        let levelsHtml = `<div class="tw" style="margin-bottom:14px"><div class="ts"><table style="font-size:12px;width:100%">
-            <thead><tr><th>القسم / التخصص</th><th>المستوى</th><th>المقررات المستهدفة (الرموز)</th><th>عدد الرزم (الشعب)</th></tr></thead><tbody>`;
-        
-        departmentsToScan.forEach(dept => {
-            getSpecs(dept.id).forEach(sp => {
-                const plan = getPlan(dept.id, sp.id);
-                const levelsWithOurCourses = PLAN_LEVELS.filter(l => plan.some(c => c.level === l && isCourseMyResponsibility(c, dept.id)));
-                
-                levelsWithOurCourses.forEach(lvl => {
-                    const levelCoursesCodes = plan
-                        .filter(c => c.level === lvl && isCourseMyResponsibility(c, dept.id))
-                        .map(c => `<span class="badge bb" style="font-family:monospace;font-size:11px;padding:3px 6px;margin:2px;display:inline-block" title="${esc(c.name)}">${esc(c.code || c.name)}</span>`)
-                        .join(' ');
-
-                    const isCoopOrProject = lvl.includes('الخامس') || lvl.includes('السادس') || lvl.includes('السابع') || lvl.includes('الثامن');
-                    const defVal = isCoopOrProject ? 1 : 2; 
-                    
-                    levelsHtml += `<tr style="border-bottom:1px solid var(--bd)">
-                        <td style="font-weight:bold;color:var(--ac)">${(dept.id !== dId) ? `<span style="color:#0d9488">[${esc(dept.name)}]</span><br>` : ''}${esc(sp.name)}</td>
-                        <td><span class="badge bb">${esc(lvl)}</span></td>
-                        <td style="max-width:300px;white-space:normal">${levelCoursesCodes}</td>
-                        <td style="text-align:center"><input type="number" class="wiz-level-input" data-targetdept="${dept.id}" data-spec="${sp.id}" data-lvl="${esc(lvl)}" value="${defVal}" min="0" max="15" style="width:60px;text-align:center;padding:4px;border:1.5px solid var(--ac);border-radius:6px;outline:none"></td>
-                    </tr>`;
-                });
-            });
-        });
-        levelsHtml += `</tbody></table></div></div>`;
-
-        // 2. بناء واجهة المقررات والمدربين مع إظهار الرمز والاسم معاً
-        const insList = getInstructors(dId) || [];
-        let coursesHtml = `<div style="max-height:300px;overflow-y:auto;border:1.5px solid var(--bd);border-radius:8px;padding:12px;background:#f8fafc">`;
-        uniqueCourses.forEach(c => {
-            const catBadge = (c.cat === 'sup' || isSupCourseByName(c.name)) ? `<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">دراسات عامة</span>` : 
-                             (c.cat === 'comp' || isCompCourseByName(c.name)) ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">حاسب مشترك</span>` : 
-                             `<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">تخصص</span>`;
-            
-            const uniqueKey = (c.code || c.name).trim();
-
-            coursesHtml += `<div style="margin-bottom:12px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
-                <strong style="font-size:13px;color:#1e40af;display:block;margin-bottom:8px">
-                    📚 <span style="font-family:monospace;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:5px;font-weight:800;font-size:12px;margin-left:5px">${esc(c.code || '')}</span> ${esc(c.name)} ${catBadge}
-                </strong>
-                <div style="display:flex;flex-wrap:wrap;gap:8px">
-                ${insList.map(ins => {
-                    return `<label style="font-size:11px;display:flex;align-items:center;gap:4px;background:#fff;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;transition:.2s">
-                    <input type="checkbox" class="wiz-course-ins" data-course="${esc(uniqueKey)}" data-coursename="${esc(c.name)}" value="${ins.id}" style="cursor:pointer;width:14px;height:14px"> ${esc(ins.name || '')}
-                    </label>`;
-                }).join('')}
-                ${insList.length === 0 ? `<span style="color:#dc2626;font-size:10px">لا يوجد مدربون مسجلون في قسمك</span>` : ''}
-                </div>
-            </div>`;
-        });
-        coursesHtml += `</div>`;
-
-        modal.innerHTML = `<div class="modal" style="max-width:950px;direction:rtl">
-            <div class="modal-head" style="background:linear-gradient(135deg, #4f46e5, #3730a3)">
-                <h2>🤖 المعالج الذكي للتوزيع التلقائي</h2>
-                <button type="button" class="modal-close" onclick="document.getElementById('autoDistWizardModal').style.display='none'">✕</button>
-            </div>
-            <div class="modal-body">
-                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم المطلوبة</h3>
-                ${levelsHtml}
-
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:20px">
-                    <h3 style="font-size:14px;color:var(--tx);margin:0">2️⃣ تحديد المدربين لكل مقرر</h3>
-                    <button type="button" class="bpu" style="font-size:12px;padding:6px 12px;background:#8b5cf6" onclick="window.applyWizardSS07Mapping('${dId}')">🪄 استنتاج الروابط تلقائياً من تقرير SS07</button>
-                </div>
-                ${coursesHtml}
-
-                <div class="fld" style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-top:20px">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:#15803d;margin:0">
-                        <input type="checkbox" id="wiz-compress-4days" checked style="width:16px;height:16px;cursor:pointer">
-                        🗓️ ضغط الجدول في 4 أيام قدر الإمكان
-                    </label>
-                    <div style="font-size:11px;color:#166534;margin-top:4px;opacity:.9">
-                        💡 سيقوم النظام باختيار وتوزيع 4 أيام تلقائياً لكل شعبة، مع تفريغ يوم كامل كراحة أسبوعية، ولا يُلجأ لليوم الخامس إلا عند تعارض القاعات أو المدربين.
-                    </div>
-                </div>
-
-                <div style="display:flex;gap:10px;margin-top:20px">
-                    <button type="button" class="bpri" style="background:#4f46e5;font-size:14px;padding:12px 24px" onclick="window.executeAutoDistribution('${dId}')">🚀 بدء توليد الجدول الشامل</button>
-                    <button type="button" class="bsec" style="font-size:14px;padding:12px 24px" onclick="document.getElementById('autoDistWizardModal').style.display='none'">إلغاء</button>
-                </div>
-            </div>
-        </div>`;
-        modal.style.display = 'flex';
-        
-    } catch (err) {
-        alert('حدث خطأ أثناء فتح المعالج: ' + err.message);
-        console.error(err);
+  // دوال النوافذ العصرية لإضافة الرقم المرجعي وعدد المتدربين
+window.openEditBundleCrnModal = function(deptId, bundleId) {
+    const bundles = getBundles(deptId);
+    const b = bundles.find(x => x.id === bundleId);
+    if (!b) return;
+    const current = b.crn || '';
+    let modal = document.getElementById('editBundleCrnModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'editBundleCrnModal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
     }
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px;direction:rtl">
+        <div class="modal-head" style="background:#7c3aed">
+          <h2>🔢 تعديل الرقم المرجعي (لرزمة كاملة)</h2>
+          <button class="modal-close" onclick="closeModal('editBundleCrnModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="fld">
+            <label>الرقم المرجعي لرزمة "${esc(b.name)}"</label>
+            <input type="text" id="bundle-crn-input" value="${esc(current)}" placeholder="مثال: 1790404AA" style="width:100%">
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="bpri" style="background:#7c3aed" onclick="saveEditBundleCrn('${deptId}','${bundleId}')">💾 حفظ</button>
+            <button class="bsec" onclick="closeModal('editBundleCrnModal')">إلغاء</button>
+          </div>
+        </div>
+      </div>
+    `;
+    openModal('editBundleCrnModal');
+    setTimeout(() => document.getElementById('bundle-crn-input').focus(), 100);
 };
+
+window.saveEditBundleCrn = function(deptId, bundleId) {
+    const val = document.getElementById('bundle-crn-input').value.trim();
+    const arr = getBundles(deptId);
+    const b = arr.find(x => x.id === bundleId);
+    if (b) {
+        b.crn = val;
+        saveBundles(deptId, arr);
+        renderDeptTabContent(deptId);
+        showToastMsg('✅ تم حفظ الرقم المرجعي للرزمة');
+    }
+    closeModal('editBundleCrnModal');
+};
+
+window.openEditBundleStudentsModal = function(deptId, bundleId) {
+    const bundles = getBundles(deptId);
+    const b = bundles.find(x => x.id === bundleId);
+    if (!b) return;
+    const current = b.students || '';
+    let modal = document.getElementById('editBundleStudentsModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'editBundleStudentsModal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div class="modal" style="max-width:400px;direction:rtl">
+        <div class="modal-head" style="background:#16a34a">
+          <h2>👥 تعديل عدد المتدربين (السعة)</h2>
+          <button class="modal-close" onclick="closeModal('editBundleStudentsModal')">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="fld">
+            <label>عدد المتدربين في رزمة "${esc(b.name)}"</label>
+            <input type="number" id="bundle-students-input" value="${current}" placeholder="مثال: 25" style="width:100%" min="1">
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="bpri" style="background:#16a34a" onclick="saveEditBundleStudents('${deptId}','${bundleId}')">💾 حفظ</button>
+            <button class="bsec" onclick="closeModal('editBundleStudentsModal')">إلغاء</button>
+          </div>
+        </div>
+      </div>
+    `;
+    openModal('editBundleStudentsModal');
+    setTimeout(() => document.getElementById('bundle-students-input').focus(), 100);
+};
+
+window.saveEditBundleStudents = function(deptId, bundleId) {
+    const val = parseInt(document.getElementById('bundle-students-input').value);
+    const arr = getBundles(deptId);
+    const b = arr.find(x => x.id === bundleId);
+    if (b) {
+        b.students = isNaN(val) ? 0 : val;
+        saveBundles(deptId, arr);
+        renderDeptTabContent(deptId);
+        showToastMsg('✅ تم حفظ عدد المتدربين');
+    }
+    closeModal('editBundleStudentsModal');
+};
+
 
 window.applyWizardSS07Mapping = function(dId) {
     try {
@@ -11617,7 +11550,154 @@ window.applyWizardSS07Mapping = function(dId) {
     }
 };
 
-  window.executeAutoDistribution = function(dId) {
+window.openAutoDistWizard = function(dId) {
+    try {
+        const isSup = (dId === 'sup');
+        const isIt = (dId === 'it');
+
+        const departmentsToScan = isSup 
+            ? getDepts().filter(d => d.id !== 'sup') 
+            : [getDepts().find(d => d.id === dId)].filter(Boolean);
+        
+        const totalSpecs = departmentsToScan.reduce((acc, d) => acc + getSpecs(d.id).length, 0);
+        if (totalSpecs === 0) {
+            showToastMsg('⚠️ لا توجد خطط وتخصصات معتمدة في الأقسام لتوزيعها.');
+            return;
+        }
+
+        let modal = document.getElementById('autoDistWizardModal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'autoDistWizardModal';
+            modal.className = 'modal-overlay';
+            document.body.appendChild(modal);
+        }
+
+        function isCourseMyResponsibility(c, targetDeptId) {
+            const cName = c.name || c.subj || '';
+            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
+            
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
+                return false;
+            }
+            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
+            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
+            return cCat === 'dept'; 
+        }
+        
+        const allCoursesMap = new Map();
+        departmentsToScan.forEach(dept => {
+            getSpecs(dept.id).forEach(sp => {
+                getPlan(dept.id, sp.id).forEach(c => {
+                    if (isCourseMyResponsibility(c, dept.id)) {
+                        const uniqueKey = (c.code || c.name).trim();
+                        if (!allCoursesMap.has(uniqueKey)) {
+                            allCoursesMap.set(uniqueKey, c);
+                        }
+                    }
+                });
+            });
+        });
+        
+        const uniqueCourses = Array.from(allCoursesMap.values()).sort((a,b) => (a.code||a.name).localeCompare(b.code||b.name, 'ar'));
+
+        if(uniqueCourses.length === 0) {
+             showToastMsg('⚠️ لا توجد مقررات مخصصة لقسمك في الخطط المعتمدة.');
+             return;
+        }
+
+        // 💡 1. إضافة عمود السعة إلى جدول المعالج
+        let levelsHtml = `<div class="tw" style="margin-bottom:14px"><div class="ts"><table style="font-size:12px;width:100%">
+            <thead><tr><th>القسم / التخصص</th><th>المستوى</th><th>المقررات المستهدفة (الرموز)</th><th>عدد الرزم (الشعب)</th><th>سعة الرزمة (متدربين)</th></tr></thead><tbody>`;
+        
+        departmentsToScan.forEach(dept => {
+            getSpecs(dept.id).forEach(sp => {
+                const plan = getPlan(dept.id, sp.id);
+                const levelsWithOurCourses = PLAN_LEVELS.filter(l => plan.some(c => c.level === l && isCourseMyResponsibility(c, dept.id)));
+                
+                levelsWithOurCourses.forEach(lvl => {
+                    const levelCoursesCodes = plan
+                        .filter(c => c.level === lvl && isCourseMyResponsibility(c, dept.id))
+                        .map(c => `<span class="badge bb" style="font-family:monospace;font-size:11px;padding:3px 6px;margin:2px;display:inline-block" title="${esc(c.name)}">${esc(c.code || c.name)}</span>`)
+                        .join(' ');
+
+                    const isCoopOrProject = lvl.includes('الخامس') || lvl.includes('السادس') || lvl.includes('السابع') || lvl.includes('الثامن');
+                    const defVal = isCoopOrProject ? 1 : 2; 
+                    
+                    levelsHtml += `<tr style="border-bottom:1px solid var(--bd)">
+                        <td style="font-weight:bold;color:var(--ac)">${(dept.id !== dId) ? `<span style="color:#0d9488">[${esc(dept.name)}]</span><br>` : ''}${esc(sp.name)}</td>
+                        <td><span class="badge bb">${esc(lvl)}</span></td>
+                        <td style="max-width:300px;white-space:normal">${levelCoursesCodes}</td>
+                        <td style="text-align:center"><input type="number" class="wiz-level-input" data-targetdept="${dept.id}" data-spec="${sp.id}" data-lvl="${esc(lvl)}" value="${defVal}" min="0" max="15" style="width:60px;text-align:center;padding:4px;border:1.5px solid var(--ac);border-radius:6px;outline:none"></td>
+                        <td style="text-align:center"><input type="number" class="wiz-capacity-input" data-targetdept="${dept.id}" data-spec="${sp.id}" data-lvl="${esc(lvl)}" value="20" min="1" max="100" style="width:60px;text-align:center;padding:4px;border:1.5px solid #16a34a;border-radius:6px;outline:none" title="الحد الأقصى لعدد المتدربين في هذه الرزمة"></td>
+                    </tr>`;
+                });
+            });
+        });
+        levelsHtml += `</tbody></table></div></div>`;
+
+        const insList = getInstructors(dId) || [];
+        let coursesHtml = `<div style="max-height:300px;overflow-y:auto;border:1.5px solid var(--bd);border-radius:8px;padding:12px;background:#f8fafc">`;
+        uniqueCourses.forEach(c => {
+            const catBadge = (c.cat === 'sup' || isSupCourseByName(c.name)) ? `<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">دراسات عامة</span>` : 
+                             (c.cat === 'comp' || isCompCourseByName(c.name)) ? `<span style="background:#e0e7ff;color:#3730a3;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">حاسب مشترك</span>` : 
+                             `<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700">تخصص</span>`;
+            
+            const uniqueKey = (c.code || c.name).trim();
+
+            coursesHtml += `<div style="margin-bottom:12px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
+                <strong style="font-size:13px;color:#1e40af;display:block;margin-bottom:8px">
+                    📚 <span style="font-family:monospace;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:5px;font-weight:800;font-size:12px;margin-left:5px">${esc(c.code || '')}</span> ${esc(c.name)} ${catBadge}
+                </strong>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                ${insList.map(ins => {
+                    return `<label style="font-size:11px;display:flex;align-items:center;gap:4px;background:#fff;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;transition:.2s">
+                    <input type="checkbox" class="wiz-course-ins" data-course="${esc(uniqueKey)}" data-coursename="${esc(c.name)}" value="${ins.id}" style="cursor:pointer;width:14px;height:14px"> ${esc(ins.name || '')}
+                    </label>`;
+                }).join('')}
+                ${insList.length === 0 ? `<span style="color:#dc2626;font-size:10px">لا يوجد مدربون مسجلون في قسمك</span>` : ''}
+                </div>
+            </div>`;
+        });
+        coursesHtml += `</div>`;
+
+        modal.innerHTML = `<div class="modal" style="max-width:950px;direction:rtl">
+            <div class="modal-head" style="background:linear-gradient(135deg, #4f46e5, #3730a3)">
+                <h2>🤖 المعالج الذكي للتوزيع التلقائي</h2>
+                <button type="button" class="modal-close" onclick="document.getElementById('autoDistWizardModal').style.display='none'">✕</button>
+            </div>
+            <div class="modal-body">
+                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم وسعتها (عدد الطلاب)</h3>
+                ${levelsHtml}
+
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:20px">
+                    <h3 style="font-size:14px;color:var(--tx);margin:0">2️⃣ تحديد المدربين لكل مقرر</h3>
+                    <button type="button" class="bpu" style="font-size:12px;padding:6px 12px;background:#8b5cf6" onclick="window.applyWizardSS07Mapping('${dId}')">🪄 استنتاج الروابط تلقائياً من تقرير SS07</button>
+                </div>
+                ${coursesHtml}
+
+                <div class="fld" style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-top:20px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:#15803d;margin:0">
+                        <input type="checkbox" id="wiz-compress-4days" checked style="width:16px;height:16px;cursor:pointer">
+                        🗓️ ضغط الجدول في 4 أيام قدر الإمكان
+                    </label>
+                </div>
+
+                <div style="display:flex;gap:10px;margin-top:20px">
+                    <button type="button" class="bpri" style="background:#4f46e5;font-size:14px;padding:12px 24px" onclick="window.executeAutoDistribution('${dId}')">🚀 بدء توليد الجدول الشامل</button>
+                    <button type="button" class="bsec" style="font-size:14px;padding:12px 24px" onclick="document.getElementById('autoDistWizardModal').style.display='none'">إلغاء</button>
+                </div>
+            </div>
+        </div>`;
+        modal.style.display = 'flex';
+        
+    } catch (err) {
+        alert('حدث خطأ أثناء فتح المعالج: ' + err.message);
+        console.error(err);
+    }
+};
+
+window.executeAutoDistribution = function(dId) {
     try {
         if (!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
 
@@ -11630,26 +11710,25 @@ window.applyWizardSS07Mapping = function(dId) {
             const cName = c.name || c.subj || '';
             const cCode = c.code || '';
             const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
-            
-            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
-                return false;
-            }
-
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) return false;
             if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
             if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
             return cCat === 'dept'; 
         }
 
+        // 💡 2. قراءة وإرفاق "سعة الرزمة" مع المتغيرات
         const levelsConfig = [];
         document.querySelectorAll('.wiz-level-input').forEach(inp => {
             const count = parseInt(inp.value) || 0;
             if (count > 0) {
-                levelsConfig.push({ 
-                    targetDeptId: inp.getAttribute('data-targetdept'), 
-                    specId: inp.getAttribute('data-spec'), 
-                    level: inp.getAttribute('data-lvl'), 
-                    count 
-                });
+                const targetDeptId = inp.getAttribute('data-targetdept');
+                const specId = inp.getAttribute('data-spec');
+                const level = inp.getAttribute('data-lvl');
+                
+                const capInp = document.querySelector(`.wiz-capacity-input[data-targetdept="${targetDeptId}"][data-spec="${specId}"][data-lvl="${level}"]`);
+                const capacity = capInp ? (parseInt(capInp.value) || 20) : 20;
+
+                levelsConfig.push({ targetDeptId, specId, level, count, capacity });
             }
         });
 
@@ -11668,14 +11747,8 @@ window.applyWizardSS07Mapping = function(dId) {
                 g.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
                     if(!cell) return;
                     const timeKey = `${di}_${pi}`;
-                    if(cell.insId) {
-                        if(!busyIns[cell.insId]) busyIns[cell.insId] = new Set();
-                        busyIns[cell.insId].add(timeKey);
-                    }
-                    if(cell.roomId) {
-                        if(!busyRoom[cell.roomId]) busyRoom[cell.roomId] = new Set();
-                        busyRoom[cell.roomId].add(timeKey);
-                    }
+                    if(cell.insId) { if(!busyIns[cell.insId]) busyIns[cell.insId] = new Set(); busyIns[cell.insId].add(timeKey); }
+                    if(cell.roomId) { if(!busyRoom[cell.roomId]) busyRoom[cell.roomId] = new Set(); busyRoom[cell.roomId].add(timeKey); }
                 }));
             };
             getSections(dept.id).forEach(s => scanGrid(getGrid(s.id)));
@@ -11702,9 +11775,7 @@ window.applyWizardSS07Mapping = function(dId) {
             getSections(targetDeptId).forEach(s => {
                 if (s.crn && s.name) {
                     if (!crnBank[s.name]) crnBank[s.name] = [];
-                    if (!crnBank[s.name].find(x => x.crn === s.crn)) {
-                        crnBank[s.name].push({ crn: s.crn, cap: s.capacity || 40, used: 0 });
-                    }
+                    if (!crnBank[s.name].find(x => x.crn === s.crn)) crnBank[s.name].push({ crn: s.crn, cap: s.capacity || 40, used: 0 });
                 }
             });
 
@@ -11717,11 +11788,17 @@ window.applyWizardSS07Mapping = function(dId) {
                 for (let i = matchingBundles.length; i < conf.count; i++) {
                     const bId = genId();
                     const bName = `شعبة ${i + 1}`;
-                    const newB = { id: bId, name: bName, specId: conf.specId, level: conf.level, deptId: targetDeptId };
+                    // 💡 3. تطبيق הסعة (عدد الطلاب) عند إنشاء الرزمة
+                    const newB = { id: bId, name: bName, specId: conf.specId, level: conf.level, deptId: targetDeptId, students: conf.capacity };
                     targetDeptBundles.push(newB);
                     matchingBundles.push(newB);
                     saveBundleGrid(bId, emptyGrid());
                 }
+
+                // 💡 تحديث السعة للرزم القديمة إذا شغّل المستخدم المعالج مرة أخرى
+                matchingBundles.forEach(b => {
+                    b.students = conf.capacity;
+                });
 
                 const plan = getPlan(targetDeptId, conf.specId);
                 const rawCourses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
@@ -11739,14 +11816,11 @@ window.applyWizardSS07Mapping = function(dId) {
                 for (let i = 0; i < conf.count; i++) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
-                    const bStudents = bundle.students || 20; 
+                    const bStudents = bundle.students || conf.capacity || 20; // 💡 4. استخدام السعة الجديدة
                     const fullBundleContext = `${bundle.name} (${targetDeptName}) ${sp.name} / ${conf.level}`;
 
                     let bundleOffDay = null;
-                    if (compress4Days) {
-                        bundleOffDay = bundleGlobalIdx % DAYS.length;
-                        bundleGlobalIdx++;
-                    }
+                    if (compress4Days) { bundleOffDay = bundleGlobalIdx % DAYS.length; bundleGlobalIdx++; }
 
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
                         if (cell) {
@@ -11762,30 +11836,14 @@ window.applyWizardSS07Mapping = function(dId) {
                         }
                     }));
 
-                    const getDayLoad = (dayIndex) => {
-                        let load = 0;
-                        bGrid[dayIndex].forEach(cell => { if (cell && cell.subj) load++; });
-                        return load;
-                    };
-
-                    const getCoursePlacedCount = (cName) => {
-                        let cnt = 0;
-                        bGrid.forEach(day => day.forEach(cell => {
-                            if (cell && cell.subj === cName) cnt++;
-                            if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++;
-                        }));
-                        return cnt;
-                    };
+                    const getDayLoad = (dayIndex) => { let load = 0; bGrid[dayIndex].forEach(cell => { if (cell && cell.subj) load++; }); return load; };
+                    const getCoursePlacedCount = (cName) => { let cnt = 0; bGrid.forEach(day => day.forEach(cell => { if (cell && cell.subj === cName) cnt++; if (cell && cell.sub2 && cell.sub2.subj === cName) cnt++; })); return cnt; };
 
                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
-                        
-                        if (isPhysicsExempt) {
-                            sessionsNeeded = 1;
-                            cHours = 2; 
-                        }
+                        if (isPhysicsExempt) { sessionsNeeded = 1; cHours = 2; }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         
                         let currentPlaced = getCoursePlacedCount(c.name);
@@ -11797,15 +11855,16 @@ window.applyWizardSS07Mapping = function(dId) {
                      
                         let chosenCrn = '';
                         if (crnBank[c.name]) {
+                            // 💡 5. البحث عن رقم مرجعي يسع عدد الطلاب الموجود بالرزمة
                             let crnObj = crnBank[c.name].find(x => (x.cap - x.used) >= bStudents);
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents;
+                                crnObj.used += bStudents; // خصم السعة بذكاء!
                             } else {
-                                missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا يوجد سعة في الأرقام المرجعية المتاحة.`);
+                                missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا توجد سعة كافية لـ ${bStudents} متدرب في الأرقام المرجعية המتاحة.`);
                             }
                         } else {
-                            missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا توجد أرقام مرجعية مسجلة للمادة.`);
+                            missingCrnsLog.add(`- ${c.name} (في ${fullBundleContext}): لا توجد أرقام مرجعية مسجلة للمادة أصلاً.`);
                         }
 
                         let assignedIns = null; 
@@ -11898,37 +11957,33 @@ window.applyWizardSS07Mapping = function(dId) {
         document.getElementById('autoDistWizardModal').style.display = 'none';
         renderDeptTabContent(dId);
         
-        // 💥 إظهار المودال الاحترافي بدلاً من alert القديم
         if (missingCrnsLog.size > 0) {
             let existingModal = document.getElementById('crnMissingModal');
             if (existingModal) existingModal.remove();
-
             const logHtml = Array.from(missingCrnsLog).map(log => `<div style="margin-bottom:6px; padding-bottom:6px; border-bottom:1px dashed #fcd34d;">${log}</div>`).join('');
-
             const modalHtml = `
             <div class="modal-overlay open" id="crnMissingModal" style="z-index: 10000; align-items: center; justify-content: center; display: flex;">
-                <div class="modal" style="max-width: 600px; direction: rtl; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
+                <div class="modal" style="max-width: 650px; direction: rtl; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
                     <div class="modal-head" style="background: linear-gradient(135deg, #d97706, #b45309);">
                         <h2 style="display:flex; align-items:center; gap:8px;">⚠️ تنبيه: نقص في الأرقام المرجعية</h2>
                         <button class="modal-close" onclick="document.getElementById('crnMissingModal').remove()">✕</button>
                     </div>
                     <div class="modal-body">
                         <p style="font-size:13px; color:var(--tx); margin-bottom:12px; font-weight:bold;">
-                            ✅ اكتمل التوزيع التلقائي بنجاح، لكن توجد مقررات لم تحصل على أرقام مرجعية بسبب نقص السعة أو عدم تسجيل أرقام لها:
+                            ✅ اكتمل التوزيع التلقائي بنجاح، لكن توجد مقررات لم تحصل على أرقام مرجعية بسبب نقص السعة (حسب سعة الرزمة) أو لعدم توفر أرقام لها:
                         </p>
                         <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; max-height:280px; overflow-y:auto; margin-bottom:12px; font-size:12px; color:#92400e; line-height:1.6;">
                             ${logHtml}
                         </div>
                         <div style="font-size:11px; color:#b45309; background:#ffedd5; padding:8px; border-radius:6px; margin-bottom:16px;">
-                            💡 <b>ملاحظة:</b> تم دمج الرزم في الأرقام المتاحة حتى امتلأت سعتها. يرجى مراجعة الأرقام المرجعية (CRN) لهذه المقررات.
+                            💡 <b>ملاحظة:</b> تم دمج الرزم في الأرقام المتاحة التي تكفي سعتها. يرجى مراجعة الأرقام المرجعية لهذه المقررات وتزويد النظام بأرقام إضافية.
                         </div>
                         <button class="bpri" style="width:100%; background:linear-gradient(135deg, #d97706, #b45309); border:none; padding:12px; font-size:14px;" onclick="document.getElementById('crnMissingModal').remove()">حسناً، فهمت</button>
                     </div>
                 </div>
             </div>`;
-            
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            showToastMsg(`✅ اكتمل التوزيع مع وجود ملاحظات على الأرقام المرجعية.`);
+            showToastMsg(`✅ اكتمل التوزيع مع وجود ملاحظات على سعة الأرقام المرجعية.`);
         } else {
             showToastMsg(`✅ اكتمل التوزيع بنجاح! وتم إسناد الأرقام المرجعية وضغط الأوقات.`);
         }
