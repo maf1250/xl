@@ -12316,34 +12316,49 @@ window.executeAutoDistribution = function(dId) {
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
-
-    // 💡 بناء بنك الأرقام بذكاء: الاعتماد على (الرمز الموحد) كأولوية، ثم (الاسم الموحد) كاحتياطي ممتاز
+// 💡 بنك الأرقام المرجعية المبني على الرمز الدقيق حصراً (مع استخراج الرمز من كافة حقول الشعبة)
             const crnBank = {}; 
             
-            const sectionsToScan = [];
-            getDepts().forEach(d => sectionsToScan.push(...getSections(d.id)));
+            // دالة استخراج الرمز الصريح حتى لو كان مدمجاً في الاسم أو مفقوداً
+            const extractCourseCode = (sec) => {
+                if (sec.code && sec.code.trim()) return normCode(sec.code);
+                
+                // فحص إذا كان الاسم يحتوي على رمز مدمج مثل "انجل-101" أو "رياض-121"
+                const codeMatch = (sec.name || '').match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
+                if (codeMatch) return normCode(codeMatch[1]);
 
-            sectionsToScan.forEach(s => {
-                if (s.crn) {
-                    const crnClean = String(s.crn).trim();
-                    const codeKey = s.code ? normCode(s.code) : '';
-                    const nameKey = s.name ? normName(s.name) : '';
-
-                    // 1. التخزين بناءً على الرمز
-                    if (codeKey) {
-                        if (!crnBank[codeKey]) crnBank[codeKey] = [];
-                        if (!crnBank[codeKey].find(x => x.crn === crnClean)) {
-                            crnBank[codeKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code });
-                        }
-                    }
-                    // 2. التخزين بناءً على الاسم (مهم جداً للمقررات التي فقدت رمزها أثناء الاستيراد)
-                    if (nameKey) {
-                        if (!crnBank[nameKey]) crnBank[nameKey] = [];
-                        if (!crnBank[nameKey].find(x => x.crn === crnClean)) {
-                            crnBank[nameKey].push({ crn: crnClean, cap: s.capacity || 40, used: 0, rawCode: s.code });
+                // إذا لم يوجد، نبحث عن هذا المقرر في خطط الكلية لمعرفة رمزه الدقيق
+                for (let d of getDepts()) {
+                    for (let sp of getSpecs(d.id)) {
+                        const foundCourse = getPlan(d.id, sp.id).find(c => normName(c.name) === normName(sec.name));
+                        if (foundCourse && foundCourse.code) {
+                            return normCode(foundCourse.code);
                         }
                     }
                 }
+                return '';
+            };
+
+            // مسح شُعب كل الأقسام واستخراج أرقامها وربطها برمزها الصحيح
+            getDepts().forEach(d => {
+                getSections(d.id).forEach(s => {
+                    if (s.crn) {
+                        const crnClean = String(s.crn).trim();
+                        const finalCodeKey = extractCourseCode(s);
+
+                        if (finalCodeKey) {
+                            if (!crnBank[finalCodeKey]) crnBank[finalCodeKey] = [];
+                            if (!crnBank[finalCodeKey].find(x => x.crn === crnClean)) {
+                                crnBank[finalCodeKey].push({
+                                    crn: crnClean,
+                                    cap: s.capacity || 40,
+                                    used: 0,
+                                    rawCode: finalCodeKey
+                                });
+                            }
+                        }
+                    }
+                });
             });
                   configs.forEach(conf => {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
@@ -12417,13 +12432,8 @@ window.executeAutoDistribution = function(dId) {
                                            
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
-                        const targetNameKey = normName(c.name);
 
-                        let availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
-                        
-                        if ((!availableCrnList || availableCrnList.length === 0) && targetNameKey && crnBank[targetNameKey]) {
-                            availableCrnList = crnBank[targetNameKey];
-                        }
+                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
 
                         if (availableCrnList && availableCrnList.length > 0) {
                             let crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
