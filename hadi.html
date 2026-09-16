@@ -2718,6 +2718,7 @@ function dropInstrCell(e,dId,di,pi){
 function dragMasterCard(e,sId,di,pi,isB){masterDragSrc={sId,di,pi,isB:!!isB};e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain','master');}catch(err){};e.stopPropagation();}
 
 function renderHome(){
+  const isAuthorized = CU && (CU.role === 'admin' || CU.role === 'vdean');
   const uploadWizardBanner = canUploadReports() ? `
   <div class="panel" style="background:linear-gradient(135deg,#0284c7,#0369a1);color:#fff;border:none;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
     <div>
@@ -2764,6 +2765,7 @@ function renderHome(){
       </div>
     </div>
   </div>
+    ${uploadWizardBanner}
   <div class="scards">
     <div class="scard c1"><div class="sv">${depts.length}</div><div class="sl">الأقسام</div></div>
     <div class="scard c2"><div class="sv">${totalSecs}</div><div class="sl">الشعب</div></div>
@@ -12816,28 +12818,44 @@ function processGlobalSS07(text) {
         deptMap[d.id] = { insList: getInstructors(d.id), roomsList: getRooms(d.id), seenIns: new Set(), seenRooms: new Set() };
     });
 
-    rows.slice(1).forEach(r => {
-        const deptName = String(r[iDept] || '').trim();
-        if (!deptName) return;
+ // قائمة البادئات الشهيرة لمقررات الدراسات العامة
+    const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
 
-        let matchedDept = depts.find(d => d.name === deptName);
-        if (!matchedDept) {
+    rows.slice(1).forEach(r => {
+        let deptName = String(r[iDept] || '').trim();
+        const cCode = iCourseCode > -1 ? String(r[iCourseCode] || '').trim() : '';
+        const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
+
+        // 💡 فحص ذكي: إذا كان المدرب يدرس مقرراً من مقررات الدراسات العامة، يوجه لقسم الدراسات العامة فوراً
+        const isSupCourse = SUP_PREFIXES.some(p => cCode.startsWith(p)) || isSupCourseByName(cName);
+        
+        let matchedDept = null;
+        if (isSupCourse) {
+            matchedDept = depts.find(d => d.id === 'sup' || d.name.includes('دراسات') || d.name.includes('عامة'));
+            if (!matchedDept) {
+                matchedDept = { id: 'sup', name: 'الدراسات العامة' };
+                depts.push(matchedDept);
+                saveDepts(depts);
+            }
+        } else {
+            matchedDept = depts.find(d => d.name === deptName || d.id === getKnownDeptId(deptName));
+        }
+
+        if (!matchedDept && deptName) {
             let baseId = getKnownDeptId(deptName);
             let finalId = baseId; let counter = 1;
             while (depts.find(d => d.id === finalId)) { finalId = baseId + counter; counter++; }
             matchedDept = { id: finalId, name: deptName };
             depts.push(matchedDept);
             saveDepts(depts);
-            
-            let usersList = getUsers();
-            if(!usersList.find(u => u.dept === finalId)) {
-                usersList.push({ u: 'head_' + finalId, p: '1234', name: 'رئيس ' + deptName, role: 'head', dept: finalId });
-                saveUsers(usersList);
-            }
-            deptMap[finalId] = { insList: [], roomsList: [], seenIns: new Set(), seenRooms: new Set() };
         }
 
+        if (!matchedDept) return;
+
         const dId = matchedDept.id;
+        if (!deptMap[dId]) {
+            deptMap[dId] = { insList: getInstructors(dId), roomsList: getRooms(dId), seenIns: new Set(), seenRooms: new Set() };
+        }
         const dData = deptMap[dId];
 
         const insName = String(r[iInsName] || '').trim();
@@ -12851,8 +12869,6 @@ function processGlobalSS07(text) {
             } else if (empNo && !ins.empNo) {
                 ins.empNo = empNo;
             }
-           const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
-            const cCode = iCourseCode > -1 ? String(r[iCourseCode] || '').trim() : '';
             if (!ins.historyCourses) ins.historyCourses = [];
             if (cName && !ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
             if (cCode && !ins.historyCourses.includes(cCode)) ins.historyCourses.push(cCode);
