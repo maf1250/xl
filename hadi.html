@@ -3926,16 +3926,25 @@ function getMissingRoomsDetails(deptId){
   const out=[];
   function scan(entity,g,isB){
     g.forEach((dayArr,di)=>dayArr.forEach((cell,pi)=>{
-      if(!cell||!cell.subj||cell.roomId)return;
-      if(!isDeptOwnCourseName(cell.subj,sets,deptId))return;
-      out.push({course:cell.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
-      if(cell.sub2&&cell.sub2.subj&&!cell.sub2.roomId&&isDeptOwnCourseName(cell.sub2.subj,sets,deptId)){
-        out.push({course:cell.sub2.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
+      if(!cell)return;
+      if(cell.subj && !cell.roomId && isDeptOwnCourseName(cell.subj,sets,deptId)){
+          out.push({course:cell.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
+      }
+      if(cell.sub2 && cell.sub2.subj && !cell.sub2.roomId && isDeptOwnCourseName(cell.sub2.subj,sets,deptId)){
+          out.push({course:cell.sub2.subj,entityName:entity.name||'',isB,day:DAYS[di],pi});
       }
     }));
   }
-  getSections(deptId).forEach(sec=>scan(sec,getGrid(sec.id),false));
-  getBundles(deptId).forEach(b=>scan(b,getBundleGrid(b.id),true));
+
+  if (deptId === 'sup' || deptId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>scan(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>scan(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(deptId).forEach(sec=>scan(sec,getGrid(sec.id),false));
+      getBundles(deptId).forEach(b=>scan(b,getBundleGrid(b.id),true));
+  }
   return out;
 }
 function countMissingRooms(deptId){
@@ -3948,15 +3957,19 @@ function getMissingRoomsByCourse(deptId){
   return Object.entries(byCourse).map(([course,count])=>({course,count})).sort((a,b)=>b.count-a.count);
 }
 function isRoomBusyAt(deptId,di,pi,roomId,excludeEntityId){
-  for(const s of getSections(deptId)){
-    if(s.id===excludeEntityId)continue;
-    const g=getGrid(s.id);
-    if(g[di]&&g[di][pi]&&g[di][pi].roomId===roomId)return true;
-  }
-  for(const b of getBundles(deptId)){
-    if(b.id===excludeEntityId)continue;
-    const g=getBundleGrid(b.id);
-    if(g[di]&&g[di][pi]&&g[di][pi].roomId===roomId)return true;
+  for(const d of getDepts()){
+      for(const s of getSections(d.id)){
+        if(s.id===excludeEntityId)continue;
+        const g=getGrid(s.id);
+        if(g[di]&&g[di][pi]&&g[di][pi].roomId===roomId)return true;
+        if(g[di]&&g[di][pi]&&g[di][pi].sub2&&g[di][pi].sub2.roomId===roomId)return true;
+      }
+      for(const b of getBundles(d.id)){
+        if(b.id===excludeEntityId)continue;
+        const g=getBundleGrid(b.id);
+        if(g[di]&&g[di][pi]&&g[di][pi].roomId===roomId)return true;
+        if(g[di]&&g[di][pi]&&g[di][pi].sub2&&g[di][pi].sub2.roomId===roomId)return true;
+      }
   }
   return false;
 }
@@ -3965,22 +3978,41 @@ function autoAssignRooms(deptId){
   if(!rooms.length){showToastMsg('⚠️ لا توجد قاعات مسجلة في هذا القسم — أضف قاعات أولاً من ⚙️ الإعداد');return;}
   const sets=buildSupItNameSets();
   let assigned=0,stillMissing=0;
+  
   function processEntity(entity,g,isB){
     let changed=false;
     g.forEach((dayArr,di)=>dayArr.forEach((cell,pi)=>{
-      if(!cell||!cell.subj||cell.roomId)return;
-      if(!isDeptOwnCourseName(cell.subj,sets,deptId))return; // مقررات القسم فقط — لا تلمس مقررات الدراسات العامة/الحاسب المشتركة
-      let found=null;
-      for(const room of rooms){if(!isRoomBusyAt(deptId,di,pi,room.id,entity.id)){found=room;break;}}
-      if(found){cell.roomId=found.id;assigned++;changed=true;}
-      else stillMissing++;
+      if(!cell)return;
+      
+      if(cell.subj && !cell.roomId && isDeptOwnCourseName(cell.subj,sets,deptId)){
+          let found=null;
+          for(const room of rooms){if(!isRoomBusyAt(deptId,di,pi,room.id,entity.id)){found=room;break;}}
+          if(found){cell.roomId=found.id;assigned++;changed=true;}
+          else stillMissing++;
+      }
+      
+      if(cell.sub2 && cell.sub2.subj && !cell.sub2.roomId && isDeptOwnCourseName(cell.sub2.subj,sets,deptId)){
+          let found=null;
+          for(const room of rooms){if(!isRoomBusyAt(deptId,di,pi,room.id,entity.id)){found=room;break;}}
+          if(found){cell.sub2.roomId=found.id;assigned++;changed=true;}
+          else stillMissing++;
+      }
     }));
     if(changed){if(isB)saveBundleGrid(entity.id,g);else saveGrid(entity.id,g);}
   }
-  getSections(deptId).forEach(sec=>processEntity(sec,getGrid(sec.id),false));
-  getBundles(deptId).forEach(b=>processEntity(b,getBundleGrid(b.id),true));
+  
+  if (deptId === 'sup' || deptId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>processEntity(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>processEntity(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(deptId).forEach(sec=>processEntity(sec,getGrid(sec.id),false));
+      getBundles(deptId).forEach(b=>processEntity(b,getBundleGrid(b.id),true));
+  }
+  
   renderDeptTabContent(deptId);
-  showToastMsg(assigned?`✅ تم تعيين قاعة تلقائياً لـ${assigned} محاضرة${stillMissing?(' — ⚠️ '+stillMissing+' محاضرة ما زالت بدون قاعة متاحة (كل القاعات مشغولة بنفس الوقت)'):''}`:(stillMissing?`⚠️ لا توجد قاعة متاحة حالياً لـ${stillMissing} محاضرة — كل القاعات مشغولة بنفس أوقاتها`:'ℹ️ لا توجد محاضرات بحاجة لتعيين قاعة'));
+  showToastMsg(assigned?`✅ تم تعيين قاعة تلقائياً لـ${assigned} محاضرة${stillMissing?(' — ⚠️ '+stillMissing+' محاضرة ما زالت بدون قاعة متاحة'):''}`:(stillMissing?`⚠️ لا توجد قاعة متاحة حالياً لـ${stillMissing} محاضرة`:'ℹ️ لا توجد محاضرات بحاجة لتعيين قاعة'));
 }
 function autoDistributeInstructors(deptId){
   const secs=getSections(deptId);
@@ -9798,8 +9830,17 @@ function exportDeptCourseComparisonExcel(dId){
       if(cell.sub2)pushRow(cell.sub2,entity,di,pi,true);
     }));
   }
-  getSections(dId).forEach(sec=>collect(sec,getGrid(sec.id),false));
-  getBundles(dId).forEach(b=>collect(b,getBundleGrid(b.id),true));
+  
+  if (dId === 'sup' || dId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>collect(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>collect(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(dId).forEach(sec=>collect(sec,getGrid(sec.id),false));
+      getBundles(dId).forEach(b=>collect(b,getBundleGrid(b.id),true));
+  }
+  
   if(!rows.length){showToastMsg('⚠️ لا توجد مقررات مجدولة لهذا القسم للتصدير');return;}
   rows.sort((a,b)=>{
     const ca=a['الرقم المرجعي']||'',cb=b['الرقم المرجعي']||'';
@@ -10718,8 +10759,17 @@ function collectDeptScheduledForReconciliation(dId){
       if(cell.sub2)pushPart(cell.sub2,entity,di,pi,true);
     }));
   }
-  getSections(dId).forEach(sec=>process(sec,getGrid(sec.id),false));
-  getBundles(dId).forEach(b=>process(b,getBundleGrid(b.id),true));
+  
+  if (dId === 'sup' || dId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>process(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>process(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(dId).forEach(sec=>process(sec,getGrid(sec.id),false));
+      getBundles(dId).forEach(b=>process(b,getBundleGrid(b.id),true));
+  }
+  
   return out;
 }
 
@@ -10970,10 +11020,21 @@ function buildSupItNameSets(){
   return {supNames,itNames,supExclude};
 }
 // يتحقق إن كان المقرر يخص القسم فعلياً (مو دراسات عامة ولا حاسب مشترك) — ومقررات ريادة الأعمال تُسنَد لقسم تقنية الأعمال حصراً أياً كان القسم المجدولة فيه
-function isDeptOwnCourseName(subj,sets,dId){
-  const BIZ_ONLY_COURSES=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];
-  if(BIZ_ONLY_COURSES.includes(subj))return dId==='biz';
-  return (!sets.supNames.has(subj)&&!sets.itNames.has(subj))||sets.supExclude.has(subj);
+function isDeptOwnCourseName(subj, sets, dId) {
+  if (!subj) return false;
+  const BIZ_ONLY_COURSES = ['أساسيات ريادة الأعمال', 'ريادة الأعمال', 'مبادئ ريادة الأعمال'];
+  if (BIZ_ONLY_COURSES.includes(subj)) return dId === 'biz';
+
+  const hasIT = getDepts().some(d => d.id === 'it');
+  
+  if (dId === 'sup') {
+      return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+  }
+  if (dId === 'it') {
+      return sets.itNames.has(subj);
+  }
+  
+  return (!sets.supNames.has(subj) && !sets.itNames.has(subj)) || sets.supExclude.has(subj);
 }
 
 // يجمع "شعب/رزم" القسم كوحدات لكل مقرر — كل (كيان + مقرر) يُعتبر شعبة مستقلة يفترض أن يكون لها رقم مرجعي واحد
@@ -10994,8 +11055,16 @@ function collectDeptCourseInstances(dId){
       groups[key].positions.push([di,pi]);
     }));
   }
-  getSections(dId).forEach(sec=>process(sec,getGrid(sec.id),false));
-  getBundles(dId).forEach(b=>process(b,getBundleGrid(b.id),true));
+  
+  if (dId === 'sup' || dId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>process(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>process(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(dId).forEach(sec=>process(sec,getGrid(sec.id),false));
+      getBundles(dId).forEach(b=>process(b,getBundleGrid(b.id),true));
+  }
   return Object.values(groups);
 }
 
@@ -11046,7 +11115,7 @@ function collectDeptCellsForTypeCheck(dId){
         const prevCell=pi>0?dayArr[pi-1]:null;
         const isOfficialCont=cell.extendedFrom===pi-1;
         const isLegacyCont=prevCell&&prevCell.subj===cell.subj&&(prevCell.crn||'')===(cell.crn||'')&&(prevCell.duration||2)>=3&&!cell.duration;
-        if(isOfficialCont||isLegacyCont)return; // خلية امتداد — عولجت مع الخلية السابقة
+        if(isOfficialCont||isLegacyCont)return; 
         const nextCell=dayArr[pi+1];
         const nextIsOfficialExt=nextCell&&nextCell.extendedFrom===pi;
         const nextIsLegacyExt=nextCell&&nextCell.subj===cell.subj&&(nextCell.crn||'')===(cell.crn||'')&&(cell.duration||2)>=3&&!nextCell.duration;
@@ -11064,11 +11133,17 @@ function collectDeptCellsForTypeCheck(dId){
       });
     });
   }
-  getSections(dId).forEach(sec=>scan(sec,getGrid(sec.id),false));
-  getBundles(dId).forEach(b=>scan(b,getBundleGrid(b.id),true));
+  if (dId === 'sup' || dId === 'it') {
+      getDepts().forEach(d => {
+          getSections(d.id).forEach(sec=>scan(sec,getGrid(sec.id),false));
+          getBundles(d.id).forEach(b=>scan(b,getBundleGrid(b.id),true));
+      });
+  } else {
+      getSections(dId).forEach(sec=>scan(sec,getGrid(sec.id),false));
+      getBundles(dId).forEach(b=>scan(b,getBundleGrid(b.id),true));
+  }
   return out;
 }
-
 let _typeCheckReport=null;
 let _typeCheckBannerRows=null;
 let _typeCheckDeptId=null;
