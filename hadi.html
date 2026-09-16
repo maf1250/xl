@@ -3031,7 +3031,8 @@ function setupHTML(deptId){
   </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
   const sectionsListHTML=secs.length?secs.map(x=>{
     const specName=x.specId?(specs.find(s=>s.id===x.specId)||{}).name:'';
-    const meta=`<div class="rcm">${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
+    const codeBadge = x.code ? `<span class="badge bb" style="font-family:monospace;font-weight:800;background:#dbeafe;color:#1e40af">${esc(x.code)}</span>` : ''; 
+    const meta=`<div class="rcm">${codeBadge}${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
     return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct">${esc(x.name)}</div>${meta}</div>
     <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم المرجعي" onclick="editSectionCrn('${deptId}','${x.id}')">🔢</button>
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('section','${deptId}','${x.id}')">✏️</button>
@@ -12225,7 +12226,7 @@ window.executeAutoDistribution = function(dId) {
 
         const missingCrnsLog = new Set(); 
 
-        // 💡 دالة تطبيع الرموز الجذرية: تحول الأرقام الهندية/العربية وتزيل المسافات والشرطات والبادئات
+        // دوال تطبيع الرموز والأسماء الشاملة
         const convertArabicDigits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
 
         const normCode = s => convertArabicDigits(s)
@@ -12236,11 +12237,37 @@ window.executeAutoDistribution = function(dId) {
             .trim()
             .toUpperCase();
 
+        const normName = s => (s || '')
+            .replace(/[\u064B-\u0652\u0670\s\-\_\(\)]/g, '')
+            .replace(/[إأآا]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/[يى]/g, 'ي')
+            .replace(/^ال/, '')
+            .replace(/ال/g, '')
+            .trim();
+
+        // بناء خريطة استنتاج الرمز من الخطط المعتمدة للشعب التي لا تملك رمزاً مسجلاً
+        const courseNameToCodeList = {};
+        getDepts().forEach(d => {
+            getSpecs(d.id).forEach(sp => {
+                getPlan(d.id, sp.id).forEach(c => {
+                    if (c.name && c.code) {
+                        const nKey = normName(c.name);
+                        if (!courseNameToCodeList[nKey]) courseNameToCodeList[nKey] = [];
+                        const cKey = normCode(c.code);
+                        if (!courseNameToCodeList[nKey].includes(cKey)) {
+                            courseNameToCodeList[nKey].push(cKey);
+                        }
+                    }
+                });
+            });
+        });
+
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
 
-            // 💡 بناء بنك الأرقام المرجعية معتمداً على الرمز حصراً
+            // بناء بنك الأرقام المرجعية معتمداً على الرمز حصراً
             const crnBank = {}; 
             
             const sectionsToScan = [
@@ -12253,10 +12280,17 @@ window.executeAutoDistribution = function(dId) {
                     const crnClean = String(s.crn).trim();
                     let codeKey = s.code ? normCode(s.code) : '';
                     
-                    // استخراج الرمز من الاسم لو كان الرمز مدمجاً معه مثل (اسلك-201)
                     if (!codeKey && s.name) {
                         const m = s.name.match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                         if (m) codeKey = normCode(m[1]);
+                    }
+
+                    if (!codeKey && s.name) {
+                        const nKey = normName(s.name);
+                        if (courseNameToCodeList[nKey] && courseNameToCodeList[nKey].length > 0) {
+                            codeKey = courseNameToCodeList[nKey][0];
+                            s.code = codeKey; // حفظ الرمز في الشعبة
+                        }
                     }
 
                     if (codeKey) {
@@ -12272,14 +12306,14 @@ window.executeAutoDistribution = function(dId) {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
                 if(!sp) return;
 
-                // 💡 1. حذف الرزم القديمة وجداولها تلقائياً بالكامل لهذا المستوى والتخصص
+                // 💡 الحذف التلقائي الكامل للرزم القديمة وجداولها لهذا التخصص والمستوى
                 const oldBundles = targetDeptBundles.filter(b => b.specId === conf.specId && b.level === conf.level);
                 oldBundles.forEach(ob => {
                     try { localStorage.removeItem('pq_bgrid_' + ob.id); } catch(e){}
                 });
                 targetDeptBundles = targetDeptBundles.filter(b => !(b.specId === conf.specId && b.level === conf.level));
 
-                // 💡 2. إنشاء رزم جديدة بالعدد المحدد تماماً
+                // إنشاء رزم جديدة نظيفة بالعدد المطلوب
                 const matchingBundles = [];
                 for (let i = 0; i < conf.count; i++) {
                     const bId = genId();
@@ -12293,7 +12327,7 @@ window.executeAutoDistribution = function(dId) {
                 const plan = getPlan(targetDeptId, conf.specId);
                 const rawCourses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
                 
-                // تصفية المقررات بالرمز الموحد لمنع تكرار أي مقرر
+                // تصفية المقررات بالرمز الموحد حصراً لمنع التكرار
                 const uniqueCoursesMap = new Map();
                 rawCourses.forEach(c => {
                     const key = normCode(c.code) || c.name.trim(); 
@@ -12338,7 +12372,7 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
-                        // 💡 البحث برمز المقرر الموحد حصراً
+                        // 💡 البحث برمز المقرر الموحد حصراً (تطابق تام بدون مشاكل أسماء)
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
 
