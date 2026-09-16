@@ -3045,11 +3045,10 @@ function setupHTML(deptId){
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('${type}','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('${type}','${deptId}','${x.id}')">🗑️</button>
   </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
-  const sectionsListHTML=secs.length?secs.map(x=>{
+const sectionsListHTML=secs.length?secs.map(x=>{
     const specName=x.specId?(specs.find(s=>s.id===x.specId)||{}).name:'';
-    const codeBadge = x.code ? `<span class="badge bb" style="font-family:monospace;font-weight:800;background:#dbeafe;color:#1e40af">${esc(x.code)}</span>` : ''; 
-    const meta=`<div class="rcm">${codeBadge}${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
-    return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct">${esc(x.name)}</div>${meta}</div>
+    const meta=`<div class="rcm">${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
+    return `<div class="rc"><span class="rci">📘</span><div class="rcb"><div class="rct">${x.code ? `<span style="font-family:monospace;color:var(--ac);font-weight:800;margin-left:4px">${esc(x.code)}</span>` : ''}${esc(x.name)}</div>${meta}</div>
     <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم المرجعي" onclick="editSectionCrn('${deptId}','${x.id}')">🔢</button>
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('section','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('section','${deptId}','${x.id}')">🗑️</button>
@@ -3934,7 +3933,7 @@ const legendRows = (() => {
         <td>${counter}</td>
         <td>${dragChip}</td>
       </tr>`;
-    });
+      }).join('');
   })();
 
   const legend=`<div style="overflow-x:auto;margin-bottom:4px">
@@ -12316,13 +12315,13 @@ window.executeAutoDistribution = function(dId) {
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
-          // 💡 بناء بنك الأرقام بالاعتماد على رمز المقرر (Code) الحرفي المستخرج من عمود "المقرر" في SS01
+
+        // 💡 بناء بنك الأرقام بالاعتماد على رمز المقرر (Code) الحرفي المستخرج من عمود "المقرر" في SS01
             const crnBank = {}; 
             
-            const sectionsToScan = [
-                ...getSections(targetDeptId),
-                ...(dId !== targetDeptId ? getSections(dId) : [])
-            ];
+            // 💡 إصلاح: جلب الشُعب من كافة أقسام الكلية حتى نلتقط أرقام قسم الدراسات العامة والحاسب
+            const sectionsToScan = [];
+            getDepts().forEach(d => sectionsToScan.push(...getSections(d.id)));
 
             sectionsToScan.forEach(s => {
                 if (s.crn) {
