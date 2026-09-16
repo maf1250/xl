@@ -4169,14 +4169,19 @@ function formatMissingDataMessage(missingData) {
 
     return msgs;
 }
-function countMissingRooms(deptId){
-  return getMissingRoomsDetails(deptId).length;
+function getMissingRoomsDetails(deptId){
+  return getMissingDataDetails(deptId).rooms;
 }
+
+function countMissingRooms(deptId){
+  return getMissingDataDetails(deptId).rooms.length;
+}
+
 function getMissingRoomsByCourse(deptId){
-  const details=getMissingRoomsDetails(deptId);
-  const byCourse={};
-  details.forEach(d=>{byCourse[d.course]=(byCourse[d.course]||0)+1;});
-  return Object.entries(byCourse).map(([course,count])=>({course,count})).sort((a,b)=>b.count-a.count);
+  const details = getMissingRoomsDetails(deptId);
+  const byCourse = {};
+  details.forEach(d => { byCourse[d.course] = (byCourse[d.course] || 0) + 1; });
+  return Object.entries(byCourse).map(([course, count]) => ({ course, count })).sort((a, b) => b.count - a.count);
 }
 function isRoomBusyAt(deptId,di,pi,roomId,excludeEntityId){
   for(const d of getDepts()){
