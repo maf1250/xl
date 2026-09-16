@@ -581,7 +581,8 @@ let CU = null, currentDept = null, deptActiveTab = 'grid', settingsTab = 'depts'
 // فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
 function canUserManageCourse(cName, cCat, targetDeptId) {
     if (!CU) return false;
-    if (CU.role === 'admin' || CU.role === 'vdean' || CU.role === 'dean') return true;
+    // 💡 إعطاء الصلاحية المطلقة للأدمن والوكيل
+    if (CU.role === 'admin' || CU.role === 'vdean') return true;
     if (CU.role !== 'head') return false;
 
     let cat = cCat;
@@ -598,14 +599,12 @@ function canUserManageCourse(cName, cCat, targetDeptId) {
 
     const hasIT = getDepts().some(d => d.id === 'it');
 
-    // 1. رئيس قسم الدراسات العامة: له صلاحية على مواد الدراسات فقط (والحاسب إذا سُمح له)
     if (CU.dept === 'sup') {
         if (cat === 'sup') return true;
         if (cat === 'comp' && (!hasIT || getAllowSupEditComp())) return true;
         return false;
     }
 
-    // 2. رئيس قسم الحاسب: له صلاحية على مقررات الحاسب المشتركة أينما وُجدت
     if (CU.dept === 'it') {
         if (cat === 'comp' || isCompCourseByName(cName)) return true;
         if (targetDeptId === 'it' && cat === 'dept') return true;
@@ -613,13 +612,24 @@ function canUserManageCourse(cName, cCat, targetDeptId) {
         return false;
     }
 
-    // 3. رؤساء الأقسام التخصصية (الميكانيكية، الأعمال...)
     if (cat === 'sup') return getAllowSupEdit();
     if (cat === 'comp') return false;
     if (targetDeptId && targetDeptId !== 'sup') {
         return CU.dept === targetDeptId;
     }
     return true;
+}
+
+// 💡 إعطاء صلاحية التعديل الشاملة للأدمن والوكيل
+function canEdit(dId) {
+    if (!CU) return false;
+    return CU.role === 'admin' || CU.role === 'vdean' || (CU.role === 'head' && CU.dept === dId);
+}
+
+// 💡 إعطاء صلاحية رفع التقارير والخطط للأدمن والوكيل
+function canUploadReports() {
+    if (!CU) return false;
+    return CU.role === 'admin' || CU.role === 'vdean';
 }
   // تحويل اسم الوحدة التدريبية من رايات إلى الاسم الرسمي الكامل
 function formatCollegeName(raw) {
@@ -1646,7 +1656,7 @@ function busyNoteText(info,curDeptId,isRoom){
   return (isRoom?' ⛔ محجوزة: ':' ⚠️ مشغول: ')+where+other;
 }
 function _fillInsSelect(dId,cellInsId){
-  const isAdmin = CU && (CU.role === 'admin' || CU.role === 'vdean');
+const isAdmin = CU && (CU.role === 'admin' || CU.role === 'vdean');
   const wrap=document.getElementById('cm-ins-override-wrap');
   if(wrap)wrap.style.display=isAdmin?'block':'none';
   const overrideChk=document.getElementById('cm-ins-override');
@@ -2167,7 +2177,7 @@ function undoLastChange(){
   if(typeof currentDept!=='undefined'&&currentDept)renderDeptTabContent(currentDept);
 }
 
-  function saveBundleCellModal(){
+window.saveBundleCellModal = function(){
   const subj=(document.getElementById('cm-subj').value||'').trim();
   const insId=(document.getElementById('cm-ins').value||'');
   const roomId=(document.getElementById('cm-room').value||'');
@@ -2180,7 +2190,6 @@ function undoLastChange(){
   const roomVal=roomId==='__newroom__'?'':roomId;
   const ctx=currentCell||currentBundleCell;
 
-  // 🛡️ التحقق من تجاوز الحد الأقصى للمقرر عند الحفظ بالنافذة يدوياً
   if (ctx && subj && duration !== 3 && duration !== 4) {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
@@ -2194,7 +2203,6 @@ function undoLastChange(){
       }
   }
 
-  // --- التحقق من صلاحيات التعديل لرئيس القسم (تدفق ثنائي محمي) ---
   if (ctx && CU && CU.role === 'head') {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
@@ -2219,7 +2227,6 @@ function undoLastChange(){
       const subjType = getCourseType(subj);
       const existingSubjType = getCourseType(existingSubj);
 
-      // 1. إذا كان المستخدم رئيس قسم الدراسات العامة
       if (CU.dept === 'sup') {
           if (subj && subjType !== 'sup' && !(subjType === 'comp' && getAllowSupEditComp())) {
               showToastMsg('⛔ بصفتك رئيس قسم الدراسات العامة، يمكنك فقط إسناد مقررات الدراسات العامة.');
@@ -2230,7 +2237,6 @@ function undoLastChange(){
               return;
           }
       } 
-      // 2. إذا كان المستخدم رئيس قسم الحاسب
       else if (CU.dept === 'it') {
           if (subj && subjType !== 'comp' && ctx.deptId !== 'it' && !isCompCourseByName(subj)) {
               showToastMsg('⛔ بصفتك رئيس قسم الحاسب، يمكنك فقط إسناد مقررات الحاسب في هذا القسم.');
@@ -2241,7 +2247,6 @@ function undoLastChange(){
               return;
           }
       }
-      // 3. إذا كان المستخدم رئيس قسم تخصصي آخر
       else {
           if (!getAllowSupEdit()) {
               if (subjType === 'sup' || existingSubjType === 'sup') {
@@ -2252,8 +2257,7 @@ function undoLastChange(){
       }
   }
 
-  // تدقيق: لو مدير النظام استخدم "التجاوز"
-   if(insVal && subj && ctx && CU && (CU.role === 'admin' || CU.role === 'vdean')){
+  if(insVal && subj && ctx && CU && (CU.role === 'admin' || CU.role === 'vdean')){
     const poolDept=getCoursePoolDept(subj,ctx.deptId);
     const chosenInsDept=(getDepts().find(d=>getInstructors(d.id).find(i=>i.id===insVal))||{}).id;
     if(chosenInsDept&&chosenInsDept!==poolDept){
@@ -2262,7 +2266,6 @@ function undoLastChange(){
     }
   }
 
-  // حفظ في النصف الثاني (sub2)
   if(ctx&&ctx.subSlot==='sub2'){
     const {deptId,sectionId,bundleId,di,pi}=ctx;
     const entityId=sectionId||bundleId;const isB=!!bundleId;
@@ -2287,7 +2290,6 @@ function undoLastChange(){
     closeModal('cellModal');renderDeptTabContent(currentDept);return;
   }
 
-  // حفظ عادي
   if(insVal||duration===3||duration===4){
     const ctxDeptId=(currentCell&&currentCell.deptId)||(currentBundleCell&&currentBundleCell.deptId);
     const ctxEntityId=(currentCell&&currentCell.sectionId)||(currentBundleCell&&currentBundleCell.bundleId);
@@ -2310,11 +2312,31 @@ function undoLastChange(){
 
   if(currentCell){
     const {sectionId,di,pi}=currentCell;const g=getGrid(sectionId);
-    const existingCell=g[di][pi];
+    const existingCell=g[di][pi] || {};
+    // 💡 حماية النصف الثاني 
+    const preserveSub2 = existingCell.sub2;
+    const preserveHalf = existingCell.halfOnly;
+
     if(existingCell&&existingCell.extendedFrom!==undefined&&insVal&&insVal!==existingCell.insId&&duration!==3){
       showToastMsg('⚠️ هذه الخلية ممتدة من محاضرة سابقة — استخدم "مقرر في النصف الآخر" بدلاً من ذلك');return;
     }
-    g[di][pi]=(!subj&&!insVal&&!roomVal)?null:{subj,insId:insVal,roomId:roomVal,crn,extra:extra||undefined,extraCh:extraCh,duration:duration!==2?duration:undefined,cellType:cellType||undefined};
+
+    if (!subj && !insVal && !roomVal) {
+        if (preserveSub2 && preserveSub2.subj) {
+            g[di][pi].subj = ''; g[di][pi].insId = ''; g[di][pi].roomId = ''; g[di][pi].crn = ''; g[di][pi].cellType = '';
+        } else {
+            g[di][pi] = null;
+        }
+    } else {
+        g[di][pi] = {
+            subj, insId: insVal, roomId: roomVal, crn, 
+            extra: extra || undefined, extraCh: extraCh, 
+            duration: duration !== 2 ? duration : undefined, 
+            cellType: cellType || undefined,
+            halfOnly: preserveHalf, sub2: preserveSub2
+        };
+    }
+
     if(subj&&(duration===3||duration===4))extendToNextPeriod(g,di,pi,{subj,insId:insVal,roomId:roomVal,crn},duration);
     if(subj&&(crn||insVal)){
       const sectionDeptId=currentCell.deptId;
@@ -2335,11 +2357,31 @@ function undoLastChange(){
     saveGrid(sectionId,g);currentCell=null;
   }else if(currentBundleCell){
     const {bundleId,di,pi,deptId:bundleDeptId}=currentBundleCell;const g=getBundleGrid(bundleId);
-    const existingCell2=g[di][pi];
+    const existingCell2=g[di][pi] || {};
+    // 💡 حماية النصف الثاني 
+    const preserveSub2 = existingCell2.sub2;
+    const preserveHalf = existingCell2.halfOnly;
+
     if(existingCell2&&existingCell2.extendedFrom!==undefined&&insVal&&insVal!==existingCell2.insId&&duration!==3){
       showToastMsg('⚠️ هذه الخلية ممتدة من محاضرة سابقة — استخدم "مقرر في النصف الآخر" بدلاً من ذلك');return;
     }
-    g[di][pi]=(!subj&&!insVal)?null:{subj,insId:insVal,roomId:roomVal,crn,extra:extra||undefined,extraCh:extraCh,duration:duration!==2?duration:undefined,cellType:cellType||undefined};
+
+    if (!subj && !insVal && !roomVal) {
+        if (preserveSub2 && preserveSub2.subj) {
+            g[di][pi].subj = ''; g[di][pi].insId = ''; g[di][pi].roomId = ''; g[di][pi].crn = ''; g[di][pi].cellType = '';
+        } else {
+            g[di][pi] = null;
+        }
+    } else {
+        g[di][pi] = {
+            subj, insId: insVal, roomId: roomVal, crn, 
+            extra: extra || undefined, extraCh: extraCh, 
+            duration: duration !== 2 ? duration : undefined, 
+            cellType: cellType || undefined,
+            halfOnly: preserveHalf, sub2: preserveSub2
+        };
+    }
+
     if(subj&&(duration===3||duration===4))extendToNextPeriod(g,di,pi,{subj,insId:insVal,roomId:roomVal,crn},duration);
     if(subj&&(crn||insVal)){
       const poolDeptForSubj2=insVal?getCoursePoolDept(subj,bundleDeptId):null;
@@ -2361,12 +2403,10 @@ function undoLastChange(){
   closeModal('cellModal');renderDeptTabContent(currentDept);
 }
 
-
-function clearBundleCellModal(){
+window.clearBundleCellModal = function(){
   const ctx = currentCell || currentBundleCell;
   if (!ctx) return;
 
-  // --- التحقق من صلاحيات الحذف لرئيس القسم (حماية التدفق الثنائي) ---
   if (CU && CU.role === 'head') {
       const isB = !!ctx.bundleId;
       const entityId = ctx.sectionId || ctx.bundleId;
@@ -2406,20 +2446,28 @@ function clearBundleCellModal(){
       }
   }
 
-  // --- تنفيذ الحذف مع الحفاظ على الأجزاء المشتركة ---
   const isB = !!ctx.bundleId;
   const entityId = ctx.sectionId || ctx.bundleId;
   const g = isB ? getBundleGrid(entityId) : getGrid(entityId);
   const wasCell = g[ctx.di] && g[ctx.di][ctx.pi];
   
-  pushUndoState(entityId, isB); // 💡 حفظ الحالة قبل الحذف للتراجع
+  pushUndoState(entityId, isB); // 💡 حفظ الحالة للتراجع
 
   if (ctx.subSlot === 'sub2') {
       if (wasCell && wasCell.sub2) delete wasCell.sub2;
   } else {
-      g[ctx.di][ctx.pi] = null;
-      if (wasCell && (wasCell.duration === 3 || wasCell.duration === 4)) {
-          clearExtendedCell(g, ctx.di, ctx.pi);
+      // 💡 التعديل هنا لحماية النصف الثاني (sub2) إذا كان موجوداً
+      if (wasCell && wasCell.sub2 && wasCell.sub2.subj) {
+          wasCell.subj = '';
+          wasCell.insId = '';
+          wasCell.roomId = '';
+          wasCell.crn = '';
+          wasCell.cellType = '';
+      } else {
+          g[ctx.di][ctx.pi] = null;
+          if (wasCell && (wasCell.duration === 3 || wasCell.duration === 4)) {
+              clearExtendedCell(g, ctx.di, ctx.pi);
+          }
       }
   }
 
@@ -3829,8 +3877,10 @@ window.renderBundleGrid = function(deptId,bundle,editable){
           const sub2=cell.sub2;
           const insName2=sub2&&sub2.insId?(resolveInstructorName(deptId,sub2.insId)):'';
           const roomName2=sub2&&sub2.roomId?resolveRoomName(deptId,sub2.roomId):'';
-          const half1Click=editable?` onclick="event.stopPropagation();openCell('${deptId}','${bundleId}',${di},${pi})"`:'';
+          // 💡 إصلاح الخلل هنا: الاستدعاء أصبح الصحيح للرزمة openBundleCell
+          const half1Click=editable?` onclick="event.stopPropagation();openBundleCell('${deptId}','${bundleId}',${di},${pi})"`:'';
           const half2Click=editable?` onclick="event.stopPropagation();openHalfSubCell('${deptId}','${bundleId}',${di},${pi})"`:'';
+          
           content=`<div style="position:relative;min-height:40px;display:flex">
             <div style="flex:1;border-left:1px solid var(--bd);padding:3px;overflow:hidden;cursor:pointer"${half1Click}>
               <div class="cell-subj" style="font-size:10px;border-right:3px solid ${color};padding-right:3px;line-height:1.25">${esc(cell.subj)}</div>
@@ -3886,10 +3936,10 @@ window.renderBundleGrid = function(deptId,bundle,editable){
   const totalScheduled=courses.reduce((s,c)=>s+sessionsScheduled(bundleId,c.name),0);
   const allOk=totalScheduled>=totalNeeded;
   const summaryBadge=`<span class="badge ${allOk?'bg':'br'}" style="font-size:12px">${totalScheduled}/${totalNeeded} لقاء مجدول</span>`;
-   const bundleObj = getBundles(deptId).find(b=>b.id===bundleId) || {};
+  const bundleObj = getBundles(deptId).find(b=>b.id===bundleId) || {};
   const crnDisplay = `<span class="badge ${bundleObj.crn?'bp':'br'}" style="cursor:pointer;font-size:11px" onclick="openEditBundleCrnModal('${deptId}','${bundleId}')" title="تعديل الرقم المرجعي للرزمة">🔢 ${bundleObj.crn ? esc(bundleObj.crn) : 'أضف رقماً مرجعياً للرزمة'}</span>`;
-  const studentsDisplay = `<span class="badge ${bundleObj.students?'bg':'br'}" style="cursor:pointer;font-size:11px" onclick="openEditBundleStudentsModal('${deptId}','${bundleId}')">👥 ${bundleObj.students ? esc(bundleObj.students) + ' متدرب' : 'أضف عدد المتدربين'}</span>`;  
-  // 🔥 التعديل: إزالة الأزرار الزائدة من الترويسة والاكتفاء بمسح المدربين إن كان موجوداً
+  const studentsDisplay = `<span class="badge ${bundleObj.students?'bg':'br'}" style="cursor:pointer;font-size:11px" onclick="openEditBundleStudentsModal('${deptId}','${bundleId}')">👥 ${bundleObj.students ? esc(bundleObj.students) + ' متدرب' : 'أضف عدد المتدربين'}</span>`;
+  
   return `
   <div class="panel">
     <h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -5817,8 +5867,8 @@ function renderSettings(){
       </label>
     </div>
   </div>
-  ${CU&&CU.role==='admin'?`<div class="panel" style="margin-bottom:12px">
-    <h3 style="display:flex;justify-content:space-between;align-items:center">📋 سجل التدقيق — تجاوزات صلاحية إسناد المدربين
+${CU && (CU.role === 'admin' || CU.role === 'vdean') ? `<div class="panel" style="margin-bottom:12px">
+<h3 style="display:flex;justify-content:space-between;align-items:center">📋 سجل التدقيق — تجاوزات صلاحية إسناد المدربين
       <button class="bdng" style="font-size:11px;padding:4px 10px" onclick="if(confirm('مسح سجل التدقيق نهائياً؟')){ss('pq_audit_log',[]);renderSettings();}">🗑️ مسح السجل</button>
     </h3>
     ${getAuditLog().length?`<div style="max-height:260px;overflow-y:auto;font-size:12px"><table style="width:100%;border-collapse:collapse">
@@ -8423,6 +8473,7 @@ function buildSidebar(){
   h+=`<div class="ni" id="nav-enrollment" onclick="go('enrollment')"><span class="ico">📋</span><span class="lbl">التسجيل المتوقع</span></div>`;
   h+=`<div class="ni" id="nav-stats" onclick="go('stats')"><span class="ico">📊</span><span class="lbl">الإحصائيات والتقارير</span></div>`;
   h+=`<div class="ni" id="nav-crncheck" onclick="go('crncheck')"><span class="ico">🔍</span><span class="lbl">مطابقة الأرقام المرجعية</span></div>`;
+  // إخفاء الإعدادات عن رؤساء الأقسام (تظهر للأدمن والوكيل فقط)
   // إخفاء الإعدادات عن رؤساء الأقسام (تظهر للأدمن والوكيل فقط)
   if (CU && (CU.role === 'admin' || CU.role === 'vdean')) {
       h+=`<div class="ni" id="nav-settings" onclick="go('settings')"><span class="ico">⚙️</span><span class="lbl">الإعدادات</span></div>`;
@@ -11925,7 +11976,7 @@ window.openAutoDistWizard = function(dId) {
                 <button type="button" class="modal-close" onclick="document.getElementById('autoDistWizardModal').style.display='none'">✕</button>
             </div>
             <div class="modal-body">
-                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم وسعتها (عدد الطلاب)</h3>
+                <h3 style="font-size:14px;margin-bottom:10px;color:var(--tx)">1️⃣ تحديد عدد الرزم وسعتها</h3>
                 ${levelsHtml}
 
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;margin-top:20px">
