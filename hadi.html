@@ -2489,7 +2489,6 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
     const subj=chipDragSubj;
     chipDragSubj=null;
     
-    // 🛡️ درع يمنع تجاوز الحد الأقصى للمقرر يدوياً
     if (isCourseLimitReached(dId, bundleId, true, subj, '')) {
         showToastMsg(`⛔ لا يمكن إضافة "${subj}". لقد اكتمل العدد المطلوب للمقرر بالجدول. احذف لقاءً قديماً أولاً.`);
         return;
@@ -2518,6 +2517,7 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
       const rc=findRoomConflict(dId,bundleId,di,pi,autoRoom);
       if(rc){autoRoom='';roomNote=' (بدون قاعة — القاعة محجوزة في: '+rc.name+')';}
     }
+    pushUndoState(bundleId, true); // 💡 حفظ الحالة قبل التعديل للتراجع
     g[di][pi]={subj,insId:autoIns,roomId:autoRoom,crn:autoCrn,cellType:autoType||undefined};
     if(autoIns||autoRoom||autoCrn){
       const insNm=autoIns?resolveInstructorName(dId,autoIns):'';
@@ -2544,6 +2544,8 @@ function dropBundleOrChip(e,dId,bundleId,di,pi){
   const g=getBundleGrid(bundleId);const src=g[sd][sp];const dest=g[di][pi];
   if(dest&&dest.subj&&src&&src.subj!==dest.subj){showToastMsg('⚠️ الخلية مشغولة بـ"'+dest.subj+'" — امسح محتواها أولاً');return;}
   if(src){const conf=getCellConflicts(dId,bundleId,di,pi,src);if(conf.length){showToastMsg('⚠️ '+conf[0].msg);return;}}
+  
+  pushUndoState(bundleId, true); // 💡 حفظ الحالة قبل التعديل للتراجع
   g[di][pi]=src;g[sd][sp]=dest||null;saveBundleGrid(bundleId,g);renderDeptTabContent(currentDept);
 }
 // جدول المدرب
@@ -6133,13 +6135,7 @@ function exportBundleEnrollTemplate(dId,bundleId){
   downloadStyledExcel([{name:'إضافة مواعيد',title:'قالب تسجيل — '+bundle.name,headers:headerOrder,rows}],'قالب_تسجيل_'+bundle.name.replace(/ /g,'_'));
   showToastMsg('✅ تم تصدير قالب التسجيل بصيغة Excel');
 }
-function printBundle(dId,bundleId){
-  const bundle=getBundles(dId).find(b=>b.id===bundleId);if(!bundle)return;
-  const insList=getInstructors(dId),roomList=getRooms(dId),specName=(getSpecs(dId).find(s=>s.id===bundle.specId)||{}).name||'',P=getPeriods(),g=getBundleGrid(bundleId);
-  const hdr=P.map(p=>`<th style="background:#1a5f8a;color:#fff;padding:5px;font-size:10px">م${p.n}<br>${esc(p.t)}</th>`).join('');
-  const rows=DAYS.map((day,di)=>`<tr><td style="background:#eef2f7;font-weight:700;padding:5px;font-size:10px;border:1px solid #ccc">${esc(day)}</td>${P.map((p,pi)=>{const cell=g[di]&&g[di][pi];return !cell||!cell.subj?`<td style="border:1px solid #ccc;padding:5px;color:#ccc">—</td>`:`<td style="border:1px solid #ccc;padding:5px;vertical-align:top;font-size:10px"><b>${esc(cell.subj)}</b>${cell.crn?`<br>🔢 ${esc(cell.crn)}`:''}${cell.insId?`<br>👤 ${esc(resolveInstructorName(dId,cell.insId))}`:''}</td>`;}).join('')}</tr>`).join('');
-  const win=window.open('','_blank');win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${esc(bundle.name)}</title><style>body{font-family:Arial;direction:rtl;margin:12px}@media print{@page{size:landscape;margin:10mm}}</style></head><body>${logoImgHTML(55)}<h2 style="color:#1a5f8a;font-size:13px">${esc(bundle.name)} — ${esc(specName)} / ${esc(bundle.level)}</h2><table style="border-collapse:collapse;width:100%"><thead><tr><th style="background:#1a5f8a;color:#fff;padding:5px;font-size:10px;width:55px">اليوم</th>${hdr}</tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);win.document.close();
-}
+
 function openSectionScheduleView(dId,secId){
   const sec=(getSections(dId).find(s=>s.id===secId))||{};
   const insList=getInstructors(dId),roomList=getRooms(dId),P=getPeriods(),edit=canEdit(dId),g=getGrid(secId);
@@ -9661,22 +9657,72 @@ function printAllInstructors(dId){
   w.document.close();
 }
 
-// ══ طباعة جميع الشعب (كل الرزم بكل المستويات) — دفعة واحدة ══
+function printBundle(dId,bundleId){
+  let bundle = null;
+  let actualDeptId = dId;
+  
+  // 💡 بحث ذكي للوصول للشعبة حتى لو كانت في قسم آخر (يفيد قسم الدراسات العامة)
+  bundle = getBundles(dId).find(b=>b.id===bundleId);
+  if (!bundle && (dId === 'sup' || dId === 'it')) {
+     for (const d of getDepts()) {
+        bundle = getBundles(d.id).find(b=>b.id===bundleId);
+        if (bundle) { actualDeptId = d.id; break; }
+     }
+  }
+  if(!bundle) return;
+
+  const insList=getInstructors(actualDeptId),roomList=getRooms(actualDeptId),specName=(getSpecs(actualDeptId).find(s=>s.id===bundle.specId)||{}).name||'',P=getPeriods(),g=getBundleGrid(bundleId);
+  const hdr=P.map(p=>`<th style="background:#1a5f8a;color:#fff;padding:5px;font-size:10px">م${p.n}<br>${esc(p.t)}</th>`).join('');
+  const rows=DAYS.map((day,di)=>`<tr><td style="background:#eef2f7;font-weight:700;padding:5px;font-size:10px;border:1px solid #ccc">${esc(day)}</td>${P.map((p,pi)=>{
+      const cell=g[di]&&g[di][pi];
+      if(!cell||!cell.subj) return `<td style="border:1px solid #ccc;padding:5px;color:#ccc">—</td>`;
+      
+      // 💡 تلوين مقررات القسم باللون الأزرق، والمقررات الأخرى بالرمادي لتمييزها
+      let isMine = true;
+      if (dId === 'sup' || dId === 'it') {
+          const cCat = courseCategoryByName(actualDeptId, cell.subj);
+          if (dId === 'sup') isMine = cCat === 'sup' || isSupCourseByName(cell.subj);
+          if (dId === 'it') isMine = cCat === 'comp' || isCompCourseByName(cell.subj);
+      }
+      const cellColor = isMine ? '#1a5f8a' : '#94a3b8';
+
+      return `<td style="border:1px solid #ccc;padding:5px;vertical-align:top;font-size:10px"><b style="color:${cellColor}">${esc(cell.subj)}</b>${cell.crn?`<br>🔢 ${esc(cell.crn)}`:''}${cell.insId?`<br>👤 ${esc(resolveInstructorName(actualDeptId,cell.insId))}`:''}</td>`;
+  }).join('')}</tr>`).join('');
+  const win=window.open('','_blank');win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>${esc(bundle.name)}</title><style>body{font-family:Arial;direction:rtl;margin:12px}@media print{@page{size:landscape;margin:10mm}}</style></head><body>${logoImgHTML(55)}<h2 style="color:#1a5f8a;font-size:13px">${esc(bundle.name)} — ${esc(specName)} / ${esc(bundle.level)}</h2><table style="border-collapse:collapse;width:100%"><thead><tr><th style="background:#1a5f8a;color:#fff;padding:5px;font-size:10px;width:55px">اليوم</th>${hdr}</tr></thead><tbody>${rows}</tbody></table><script>window.onload=()=>window.print();<\/script></body></html>`);win.document.close();
+}
+
 function printAllSections(dId){
-  const bundles=getBundles(dId);
-  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب (رزم) في هذا القسم');return;}
-  const insList=getInstructors(dId),roomList=getRooms(dId),specs=getSpecs(dId),P=getPeriods();
-  // رتّب حسب المستوى ثم التخصص ثم الاسم — حتى تُطبع كل مستويات الشعب مجمّعة ومرتّبة
-  const sorted=[...bundles].sort((a,b)=>{
-    const la=(a.level||''),lb=(b.level||'');
-    if(la!==lb)return la.localeCompare(lb,'ar');
-    const sa=(specs.find(s=>s.id===a.specId)||{}).name||'';
-    const sb=(specs.find(s=>s.id===b.specId)||{}).name||'';
-    if(sa!==sb)return sa.localeCompare(sb,'ar');
-    return (a.name||'').localeCompare(b.name||'','ar');
-  });
-  let body=`<h2 style="color:#1a5f8a;text-align:center;margin-bottom:16px">جداول جميع الشعب — ${esc(deptName(dId))} — فصل 1448</h2>`;
-  sorted.forEach((b,idx)=>{
+  let bundles = getBundles(dId);
+  
+  // 💡 جلب الشعب المتقاطعة (الشعب التي تحتوي مقررات الدراسات أو الحاسب في الأقسام الأخرى)
+  if (dId === 'sup' || dId === 'it') {
+     bundles = [];
+     getDepts().forEach(d => {
+        if (d.id === dId) return;
+        getBundles(d.id).forEach(b => {
+           const g = getBundleGrid(b.id);
+           const hasMyCourse = g.some(day => day.some(cell => {
+               if (!cell || !cell.subj) return false;
+               const cCat = courseCategoryByName(d.id, cell.subj);
+               const cName = cell.subj;
+               if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName);
+               if (dId === 'it') return cCat === 'comp' || isCompCourseByName(cName);
+               return false;
+           }));
+           if (hasMyCourse) {
+               bundles.push({...b, actualDeptId: d.id, name: `${b.name} (${d.name})`});
+           }
+        });
+     });
+  }
+
+  if(!bundles.length){showToastMsg('⚠️ لا توجد شعب تحتوي على مقرراتك للطباعة');return;}
+  const P=getPeriods();
+  let body=`<h2 style="color:#1a5f8a;text-align:center;margin-bottom:16px">جداول الشعب — ${esc(deptName(dId))} — فصل 1448</h2>`;
+  
+  bundles.forEach((b,idx)=>{
+    const actualDeptId = b.actualDeptId || dId;
+    const specs = getSpecs(actualDeptId);
     const specName=(specs.find(s=>s.id===b.specId)||{}).name||'';
     const g=getBundleGrid(b.id);
     const hd=P.map(p=>`<th style="padding:4px 6px;font-size:9px;background:#1a5f8a;color:#fff">م${p.n}<br/>${esc(p.t)}</th>`).join('');
@@ -9684,14 +9730,24 @@ function printAllSections(dId){
       const cells=P.map((_,pi)=>{
         const cell=g[di]&&g[di][pi];
         if(!cell||!cell.subj)return `<td style="padding:5px;border:1px solid #e2e8f0;text-align:center;color:#ccc">—</td>`;
-        const iN=cell.insId?(resolveInstructorName(dId,cell.insId)):'';
-        const rN=cell.roomId?resolveRoomName(dId,cell.roomId):'';
-        return `<td style="padding:5px;border:1px solid #e2e8f0;font-size:9px;text-align:center;vertical-align:top"><b style="color:#1a5f8a">${esc(cell.subj)}</b>${cell.crn?`<br/><small style="color:#d97706">🔢${esc(cell.crn)}</small>`:''}${iN?`<br/><small>👤${esc(iN)}</small>`:''}${rN?`<br/><small>🚪${esc(rN)}</small>`:''}</td>`;
+        const iN=cell.insId?(resolveInstructorName(actualDeptId,cell.insId)):'';
+        const rN=cell.roomId?resolveRoomName(actualDeptId,cell.roomId):'';
+        
+        let isMine = true;
+        if (dId === 'sup' || dId === 'it') {
+            const cCat = courseCategoryByName(actualDeptId, cell.subj);
+            if (dId === 'sup') isMine = cCat === 'sup' || isSupCourseByName(cell.subj);
+            if (dId === 'it') isMine = cCat === 'comp' || isCompCourseByName(cell.subj);
+        }
+        const cellColor = isMine ? '#1a5f8a' : '#94a3b8';
+
+        return `<td style="padding:5px;border:1px solid #e2e8f0;font-size:9px;text-align:center;vertical-align:top"><b style="color:${cellColor}">${esc(cell.subj)}</b>${cell.crn?`<br/><small style="color:#d97706">🔢${esc(cell.crn)}</small>`:''}${iN?`<br/><small>👤${esc(iN)}</small>`:''}${rN?`<br/><small>🚪${esc(rN)}</small>`:''}</td>`;
       }).join('');
       return `<tr><td style="padding:5px;border:1px solid #e2e8f0;font-weight:700;font-size:9px">${esc(day)}</td>${cells}</tr>`;
     }).join('');
+    
     const hasSchedule=g.some(d=>d.some(c=>c&&c.subj));
-    body+=`<div style="page-break-inside:avoid;margin-bottom:16px;${idx>0?'page-break-before:auto':''}">
+    body+=`<div style="page-break-inside:avoid;margin-bottom:16px;${idx>0?'page-break-before:always':''}">
       <div style="background:#eef6ff;padding:6px 10px;margin-bottom:6px">
         <strong style="color:#1a5f8a">${esc(b.name)}</strong>
         <span style="font-size:11px;color:#64748b"> — ${esc(specName)} / ${esc(b.level||'')}</span>
@@ -9700,11 +9756,12 @@ function printAllSections(dId){
         :'<div style="text-align:center;padding:10px;color:#94a3b8;font-size:11px;border:1px dashed #e2e8f0">لا يوجد جدول معيّن بعد</div>'}
     </div>`;
   });
+  
   const w=window.open('','_blank');
   w.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>جداول الشعب</title>
     <style>body{font-family:Arial,sans-serif;direction:rtl;margin:14px;font-size:11px}
     @media print{@page{size:landscape;margin:6mm}button{display:none}
-    div[style*="page-break"]{page-break-before:always}}</style></head>
+    div[style*="page-break-before:always"]{page-break-before:always}}</style></head>
     <body>${logoImgHTML(55)}${body}
     <div style="text-align:center;margin-top:12px">
       <button onclick="window.print()" style="background:#1a5f8a;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px">🖨️ طباعة / حفظ PDF</button>
