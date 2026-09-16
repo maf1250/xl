@@ -1304,8 +1304,8 @@ function _migrateRoles(){
 
   users.forEach(u => {
       if(u.role === 'rais') { u.role = 'head'; changed = true; }
-      if(u.role === 'wakeel') { u.role = 'dean'; changed = true; }
-      if(u.u === 'wakeel') { u.u = 'dean'; changed = true; }
+      if(u.role === 'wakeel') { u.role = 'vdean'; changed = true; }
+      if(u.u === 'wakeel') { u.u = 'vdean'; changed = true; }
       if(u.u.startsWith('rais_')) { u.u = u.u.replace('rais_', 'head_'); changed = true; }
   });
   if(changed) saveUsers(users);
@@ -1315,8 +1315,8 @@ function _migrateRoles(){
       let cu = JSON.parse(cuStr);
       let cuChanged = false;
       if(cu.role === 'rais') { cu.role = 'head'; cuChanged = true; }
-      if(cu.role === 'wakeel') { cu.role = 'dean'; cuChanged = true; }
-      if(cu.u === 'wakeel') { cu.u = 'dean'; cuChanged = true; }
+      if(cu.role === 'wakeel') { cu.role = 'vdean'; cuChanged = true; }
+      if(cu.u === 'wakeel') { cu.u = 'vdean'; cuChanged = true; }
       if(cu.u.startsWith('rais_')) { cu.u = cu.u.replace('rais_', 'head_'); cuChanged = true; }
       if(cuChanged) { sessionStorage.setItem('pq_cu', JSON.stringify(cu)); CU = cu; }
   }
