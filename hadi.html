@@ -11478,19 +11478,20 @@ window.applyWizardSS07Mapping = function(dId) {
 
 window.executeAutoDistribution = function(dId) {
     try {
-        if(!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
+        if (!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
 
         const isServiceDept = (dId === 'sup' || dId === 'it');
         const P = getPeriods();
         const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
         let bundleGlobalIdx = 0;
         
+        // تحديد ما إذا كان المقرر يخص القسم الحالي (وليس دراسات عامة/حاسب مشترك)
         function isCourseMyResponsibility(c, targetDeptId) {
             const cName = c.name || c.subj || '';
             const cCode = c.code || '';
             const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
             
-            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
                 return false;
             }
 
@@ -11499,6 +11500,7 @@ window.executeAutoDistribution = function(dId) {
             return cCat === 'dept'; 
         }
 
+        // قراءة إعدادات الرزم من الواجهة
         const levelsConfig = [];
         document.querySelectorAll('.wiz-level-input').forEach(inp => {
             const count = parseInt(inp.value) || 0;
@@ -11512,6 +11514,7 @@ window.executeAutoDistribution = function(dId) {
             }
         });
 
+        // قراءة ربط المدربين (إن وُجد)
         const courseInsMap = {};
         document.querySelectorAll('.wiz-course-ins:checked').forEach(cb => {
             const cName = cb.getAttribute('data-course');
@@ -11522,6 +11525,7 @@ window.executeAutoDistribution = function(dId) {
         const busyIns = {};  
         const busyRoom = {}; 
         
+        // حجز الأوقات المشغولة حالياً (في الجدول اليدوي) لمنع التعارض
         getDepts().forEach(dept => {
             const scanGrid = (g) => {
                 g.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
@@ -11576,7 +11580,7 @@ window.executeAutoDistribution = function(dId) {
                 // 🛡️ تصفية المقررات المكررة في الخطة (بسبب ملفات SC04 التي تحتوي على تكرارات)
                 const uniqueCoursesMap = new Map();
                 rawCourses.forEach(c => {
-                    const key = (c.code || c.name).trim();
+                    const key = (c.code || c.name).trim(); // استخدام مفتاح موحّد (الكود أو الاسم)
                     if (!uniqueCoursesMap.has(key)) {
                         uniqueCoursesMap.set(key, c);
                     }
@@ -11585,48 +11589,47 @@ window.executeAutoDistribution = function(dId) {
 
                 if(courses.length === 0) return;
 
-                courses.sort((a,b) => (chByName[b.name]||2) - (chByName[a.name]||2));
+                // 💥 التوزيع الجديد: الأولوية للأيام المبكرة، ثم الأيام الأقل ازدحاماً
+                // 1. اختيار الأيام المفضلة (تجنب يوم الراحة، ثم الأيام المبكرة)
+                const dayOrder = [];
+                const preferredDays = [0, 1, 2, 3, 4].filter(d => !excl.includes(d)); // أيام الأحد إلى الخميس
+                const fallbackDays = [0, 1, 2, 3, 4].filter(d => excl.includes(d)); // أيام الراحة
+                
+                if (compress4Days && bundleOffDay !== null) {
+                    // الأيام المفضلة (بدون يوم الراحة) أولاً
+                    dayOrder.push(...preferredDays.sort((a, b) => {
+                        const loadA = getDayLoad(a);
+                        const loadB = getDayLoad(b);
+                        if (loadA !== loadB) return loadA - loadB; // الأيام الأقل حملاً أولاً
+                        return Math.random() - 0.5; // عشوائي للمحافظة على التنوع
+                    }));
+                    // ثم يوم الراحة (لو تم اختياره)
+                    if (!usedDaysForCourse.has(bundleOffDay)) {
+                        dayOrder.push(bundleOffDay);
+                    }
+                } else {
+                    // توزيع طبيعي على كل الأيام (5 أيام)
+                    dayOrder.push(...[0, 1, 2, 3, 4].sort((a, b) => {
+                        const loadA = getDayLoad(a);
+                        const loadB = getDayLoad(b);
+                        if (loadA !== loadB) return loadA - loadB;
+                        return Math.random() - 0.5;
+                    }));
+                }
+
+                // 2. اختيار الفترة الزمنية (م1 ثم م2 ثم م3 ثم م4)
+                const periodOrder = [...Array(P.length).keys()].sort((a, b) => a - b); // من م1 إلى م4
+
+                courses.sort((a, b) => (chByName[b.name] || 2) - (chByName[a.name] || 2));
 
                 for (let i = 0; i < conf.count; i++) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
 
-                    let bundleOffDay = null;
-                    if (compress4Days) {
-                        bundleOffDay = bundleGlobalIdx % DAYS.length;
-                        bundleGlobalIdx++;
-                    }
+                    let placedCount = 0;
+                    let assignedIns = null; // لتثبيت نفس المدرب للقاءات المتتالية لنفس المقرر
 
-                    bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
-                        if (cell) {
-                            const mainMine = isCourseMyResponsibility(cell, targetDeptId);
-                            const sub2Mine = cell.sub2 ? isCourseMyResponsibility(cell.sub2, targetDeptId) : false;
-
-                            if (mainMine && !sub2Mine && cell.sub2) {
-                                bGrid[di][pi] = {
-                                    subj: cell.sub2.subj,
-                                    insId: cell.sub2.insId,
-                                    roomId: cell.sub2.roomId,
-                                    crn: cell.sub2.crn,
-                                    duration: cell.sub2.duration,
-                                    halfOnly: true,
-                                    cellType: cell.sub2.cellType
-                                };
-                            } else if (!mainMine && sub2Mine) {
-                                delete cell.sub2;
-                            } else if (mainMine) {
-                                bGrid[di][pi] = null;
-                            }
-                        }
-                    }));
-
-                    const getDayLoad = (dayIndex) => {
-                        let load = 0;
-                        bGrid[dayIndex].forEach(cell => { if (cell && cell.subj) load++; });
-                        return load;
-                    };
-
-                   courses.forEach(c => {
+                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
@@ -11642,49 +11645,15 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
-                        let assignedIns = null; 
-                        const usedDaysForCourse = new Set(); 
-
+                        let placedThisCourse = false;
                         for (let sess = 0; sess < sessionsNeeded; sess++) {
                             const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                             let placed = false;
                                                     
-                            let candidateDays = [];
-                            if (compress4Days && bundleOffDay !== null) {
-                                const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay);
-                                let preferred = preferredDays.filter(d => !usedDaysForCourse.has(d)).sort(() => Math.random() - 0.5);
-                                let fallback = (!usedDaysForCourse.has(bundleOffDay)) ? [bundleOffDay] : [];
-                                candidateDays = [...preferred, ...fallback];
-                            } else {
-                                candidateDays = [...Array(DAYS.length).keys()]
-                                    .filter(d => !usedDaysForCourse.has(d))
-                                    .sort(() => Math.random() - 0.5);
-                            }
-
-                            if (candidateDays.length === 0) {
-                                if (compress4Days && bundleOffDay !== null) {
-                                    const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay).sort(() => Math.random() - 0.5);
-                                    candidateDays = [...preferredDays, bundleOffDay];
-                                } else {
-                                    candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
-                                }
-                            }
-
-                            // ترتيب الأيام لتجميع المحاضرات وتقليل الفراغات
-                            candidateDays.sort((a, b) => {
-                                const loadA = getDayLoad(a);
-                                const loadB = getDayLoad(b);
-                                if (loadA !== loadB) return loadB - loadA; 
-                                return 0;
-                            });
-
-                            // ترتيب صارم للصباح (م1 ثم م2 ثم م3)
-                            const prioritizedPeriods = [...Array(P.length).keys()];
-
                             outerLoop:
-                            for (let di of candidateDays) {
-                                for (let pi of prioritizedPeriods) { 
+                            for (let di of dayOrder) {
+                                for (let pi of periodOrder) { 
                                     const timeKey = `${di}_${pi}`;
                                     
                                     if (bGrid[di][pi]) continue;
