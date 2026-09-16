@@ -375,6 +375,30 @@ td.day-cell:hover .cell-lock-toggle{opacity:1}
   </div>
 </div>
 
+  <!-- ══ FORCE PASSWORD CHANGE MODAL ══ -->
+<div class="modal-overlay" id="forcePassModal" style="z-index: 10000; background: rgba(0,0,0,0.85);">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-head" style="background:#dc2626">
+      <h2>🔒 تغيير كلمة المرور الافتراضية</h2>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px; color:var(--tx); margin-bottom:15px; line-height:1.6;">
+        لأسباب أمنية، يجب عليك تغيير كلمة المرور الافتراضية قبل الاستمرار في استخدام النظام.
+      </p>
+      <div class="fld">
+        <label>كلمة المرور الجديدة</label>
+        <input type="password" id="fp-new" placeholder="أدخل كلمة مرور قوية" />
+      </div>
+      <div class="fld">
+        <label>تأكيد كلمة المرور</label>
+        <input type="password" id="fp-confirm" placeholder="أعد إدخال كلمة المرور" />
+      </div>
+      <div id="fp-err" style="display:none; background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:10px; margin-bottom:12px; font-size:12px; color:#dc2626; font-weight:bold;"></div>
+      <button class="bpri" style="width:100%; background:#dc2626; border:none;" onclick="executeForcePassChange()">💾 حفظ ومتابعة</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ SUGGESTED ITEM ASSIGN MODAL ══ -->
 <div class="modal-overlay" id="suggestAssignModal">
   <div class="modal" style="max-width:420px">
@@ -851,9 +875,18 @@ function isCellLocked(entityId,di,pi,isBundle){
 function toggleCellLock(dId,entityId,di,pi,isBundle){
   const g=isBundle?getBundleGrid(entityId):getGrid(entityId);
   if(!g[di])return;
+  
+  const cell = g[di][pi];
+  // --- حماية التثبيت للمقررات التي لا تتبع للقسم ---
+  if (cell && cell.subj && CU && CU.role === 'head') {
+      if (!canUserManageCourse(cell.subj, cell.cellType, dId)) {
+          showToastMsg('🔒 لا تملك صلاحية تثبيت أو فك تثبيت مقررات تتبع قسم آخر.');
+          return;
+      }
+  }
+  
   if(!g[di][pi])g[di][pi]={subj:'',insId:'',roomId:'',crn:''};
-  const cell=g[di][pi];
-  cell.locked=!cell.locked;
+  g[di][pi].locked=!g[di][pi].locked;
   if(isBundle)saveBundleGrid(entityId,g);else saveGrid(entityId,g);
   renderDeptTabContent(currentDept);
 }
@@ -1167,13 +1200,43 @@ function scrollAppTo(where){
   });
   window.scrollTo(0,val);
 }
+function checkDefaultPassword() {
+    if(!CU) return;
+    const users = getUsers();
+    const uObj = users.find(u => u.u === CU.u);
+    if(uObj) {
+        // فحص إذا كانت الكلمة 1234 أو admin أو مطابقة لاسم المستخدم
+        if(uObj.p === '1234' || uObj.p === 'admin' || uObj.p === uObj.u) {
+            document.getElementById('forcePassModal').classList.add('open');
+        }
+    }
+}
+
+function executeForcePassChange() {
+    const p1 = document.getElementById('fp-new').value;
+    const p2 = document.getElementById('fp-confirm').value;
+    const err = document.getElementById('fp-err');
+    if(!p1 || !p2) { err.textContent = 'الرجاء تعبئة الحقول'; err.style.display='block'; return; }
+    if(p1 !== p2) { err.textContent = 'كلمتا المرور غير متطابقتين'; err.style.display='block'; return; }
+    if(p1 === '1234' || p1 === 'admin' || p1 === CU.u) { err.textContent = 'الرجاء اختيار كلمة مرور مختلفة عن الافتراضية'; err.style.display='block'; return; }
+
+    const users = getUsers();
+    const uObj = users.find(u => u.u === CU.u);
+    if(uObj) {
+        uObj.p = p1;
+        saveUsers(users);
+    }
+    document.getElementById('forcePassModal').classList.remove('open');
+    showToastMsg('✅ تم تغيير كلمة المرور بنجاح');
+}
+
+// تعديل الدالة showApp لإضافة فحص كلمة المرور عند الدخول
 function showApp(){
   document.getElementById('loginPage').style.display='none';
   const a=document.getElementById('appPage');a.style.display='flex';a.style.flexDirection='column';
   document.getElementById('tbU').textContent='👤 '+(CU.name||CU.u);
   document.getElementById('tbR').textContent=RLBL[CU.role]||CU.role;
   
-  // سحب اسم الكلية المحفوظ وعرضه في الشريط العلوي
   const collegeName = ls('pq_college_name', 'الكلية التقنية');
   const tbT = document.getElementById('tbT');
   if(tbT) tbT.textContent = 'جداول الأقسام — ' + collegeName;
@@ -1192,6 +1255,7 @@ function showApp(){
     document.body.appendChild(div);
   }
   go('home');
+  checkDefaultPassword(); 
 }
 
 // ══ MIGRATIONS ══
@@ -11329,6 +11393,16 @@ window.openAutoDistWizard = function(dId) {
                 </div>
                 ${coursesHtml}
 
+                <div class="fld" style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:10px;padding:12px 14px;margin-top:20px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:700;color:#15803d;margin:0">
+                        <input type="checkbox" id="wiz-compress-4days" checked style="width:16px;height:16px;cursor:pointer">
+                        🗓️ ضغط الجدول في 4 أيام قدر الإمكان
+                    </label>
+                    <div style="font-size:11px;color:#166534;margin-top:4px;opacity:.9">
+                        💡 سيقوم النظام باختيار وتوزيع 4 أيام تلقائياً لكل شعبة، مع تفريغ يوم كامل كراحة أسبوعية، ولا يُلجأ لليوم الخامس إلا عند تعارض القاعات أو المدربين.
+                    </div>
+                </div>
+
                 <div style="display:flex;gap:10px;margin-top:20px">
                     <button type="button" class="bpri" style="background:#4f46e5;font-size:14px;padding:12px 24px" onclick="window.executeAutoDistribution('${dId}')">🚀 بدء توليد الجدول الشامل</button>
                     <button type="button" class="bsec" style="font-size:14px;padding:12px 24px" onclick="document.getElementById('autoDistWizardModal').style.display='none'">إلغاء</button>
@@ -11387,6 +11461,8 @@ window.executeAutoDistribution = function(dId) {
         const isServiceDept = (dId === 'sup' || dId === 'it');
         const targetCat = isServiceDept ? (dId === 'sup' ? 'sup' : 'comp') : 'dept';
         const P = getPeriods();
+        const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
+        let bundleGlobalIdx = 0;
         
         function isCourseMyResponsibility(c, targetDeptId) {
             if (dId === 'sup') return c.cat === 'sup'; 
@@ -11476,9 +11552,16 @@ window.executeAutoDistribution = function(dId) {
 
                 courses.sort((a,b) => (chByName[b.name]||2) - (chByName[a.name]||2));
 
-                for (let i = 0; i < conf.count; i++) {
-                    const bundle = matchingBundles[i];
-                    const bGrid = getBundleGrid(bundle.id);
+            for (let i = 0; i < conf.count; i++) {
+    const bundle = matchingBundles[i];
+    const bGrid = getBundleGrid(bundle.id);
+
+    // النظام يختار تلقائياً يوم الراحة لكل شعبة بالتناوب العشوائي لضمان التوازن
+    let bundleOffDay = null;
+    if (compress4Days) {
+        bundleOffDay = bundleGlobalIdx % DAYS.length;
+        bundleGlobalIdx++;
+    }
 
                     // 🛡️ درع الحماية: مسح المقررات التابعة للمستخدم الحالي فقط، والإبقاء على المقررات الأخرى!
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
@@ -11500,16 +11583,36 @@ window.executeAutoDistribution = function(dId) {
                             const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                             let placed = false;
-                            
-                            // استبعاد الأيام التي تم وضع هذا المقرر فيها مسبقاً لنفس الرزمة
-                            let candidateDays = [...Array(DAYS.length).keys()]
-                                .filter(d => !usedDaysForCourse.has(d))
-                                .sort(() => Math.random() - 0.5);
+                                                    
+// بناء الأيام المرشحة للمحاضرة تلقائياً
+let candidateDays = [];
+if (compress4Days && bundleOffDay !== null) {
+    // 1. الأيام الـ 4 التي اختارها النظام لهذه الشعبة
+    const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay);
+    
+    // فحص الأيام التي لم يُسند إليها هذا المقرر بعد
+    let preferred = preferredDays.filter(d => !usedDaysForCourse.has(d)).sort(() => Math.random() - 0.5);
+    
+    // 2. اليوم الخامس يوضع في نهاية القائمة كملاذ أخير عند التعارض
+    let fallback = (!usedDaysForCourse.has(bundleOffDay)) ? [bundleOffDay] : [];
+    
+    candidateDays = [...preferred, ...fallback];
+} else {
+    // توزيع طبيعي على الـ 5 أيام
+    candidateDays = [...Array(DAYS.length).keys()]
+        .filter(d => !usedDaysForCourse.has(d))
+        .sort(() => Math.random() - 0.5);
+}
 
-                            // ملاذ أخير فقط إن كانت كل أيام الأسبوع محجوزة بالكامل
-                            if (candidateDays.length === 0) {
-                                candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
-                            }
+// في حال نفاذ الأيام المتاحة للمقرر (حالة نادرة)، نبقي اليوم الخامس كخيار أخير
+if (candidateDays.length === 0) {
+    if (compress4Days && bundleOffDay !== null) {
+        const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay).sort(() => Math.random() - 0.5);
+        candidateDays = [...preferredDays, bundleOffDay];
+    } else {
+        candidateDays = [...Array(DAYS.length).keys()].sort(() => Math.random() - 0.5);
+    }
+}
 
                             const shuffledPeriods = [...Array(P.length).keys()].sort(() => Math.random() - 0.5);
 
