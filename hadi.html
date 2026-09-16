@@ -11309,10 +11309,18 @@ window.openAutoDistWizard = function(dId) {
             document.body.appendChild(modal);
         }
 
-        function isCourseMyResponsibility(c, targetDeptId) {
-            if (isSup) return c.cat === 'sup' || isSupCourseByName(c.name);
-            if (isIt) return (targetDeptId === 'it' && c.cat === 'dept') || c.cat === 'comp' || isCompCourseByName(c.name);
-            return c.cat === 'dept';
+function isCourseMyResponsibility(c, targetDeptId) {
+            const cName = c.name || c.subj || '';
+            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
+            
+            // إذا كان الخيار مفعلاً وهناك مقرر مستقل مخصص للعملي، نتجاهله
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('معمل'))) {
+                return false;
+            }
+
+            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
+            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
+            return cCat === 'dept'; 
         }
         
         // تجميع المقررات مع التمييز بالرمز (Code) لمنع دمج المقررات متطابقة الاسم
@@ -11588,13 +11596,17 @@ window.executeAutoDistribution = function(dId) {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
+                        
+                        // إضافة هذا السطر لمنع أي مقرر عملي مستقل للفيزياء:
+                        if (isPhysicsExempt && (c.name.includes('عملي') || c.name.includes('مختبر') || c.name.includes('معمل'))) return;
+
                         if (isPhysicsExempt) {
                             sessionsNeeded = 1;
                             cHours = 2;
                         }
                         const isSplitCourse = (cHours === 3 && sessionsNeeded === 2);
                         const allowedInsIds = courseInsMap[c.name] || [];
-                        
+                     
                         let assignedIns = null; // لتثبيت نفس المدرب لكلا اللقائين
                         const usedDaysForCourse = new Set(); // ⛔ لتتبع الأيام ومنع التكرار في نفس اليوم
 
@@ -11672,7 +11684,7 @@ if (candidateDays.length === 0) {
                                             crn: '',
                                             duration: dur,
                                             halfOnly: isHalf ? true : undefined,
-                                            cellType: isPhysicsExempt ? 'theory' : ((parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory')
+                                          cellType: isPhysicsExempt ? 'theory' : ((parseInt(c.am)>0 || parseInt(c.practical)>0) ? 'practical' : 'theory')  
                                         };
 
                                         if (chosenIns) {
