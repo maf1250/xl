@@ -11481,18 +11481,16 @@ window.executeAutoDistribution = function(dId) {
         if(!confirm('⚠️ سيتم تطبيق التوزيع التلقائي. هل تريد الاستمرار؟')) return;
 
         const isServiceDept = (dId === 'sup' || dId === 'it');
-        const targetCat = isServiceDept ? (dId === 'sup' ? 'sup' : 'comp') : 'dept';
         const P = getPeriods();
         const compress4Days = document.getElementById('wiz-compress-4days') ? document.getElementById('wiz-compress-4days').checked : true;
         let bundleGlobalIdx = 0;
         
-        // إصلاح دالة درع الحماية: الاعتماد على الاسم بدل الفئة للتعرف على الخلايا المبنية مسبقاً
         function isCourseMyResponsibility(c, targetDeptId) {
             const cName = c.name || c.subj || '';
+            const cCode = c.code || '';
             const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
             
-            // إذا كان الخيار مفعلاً وهناك مقرر مستقل مخصص للعملي، نتجاهله
-            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
                 return false;
             }
 
@@ -11501,7 +11499,6 @@ window.executeAutoDistribution = function(dId) {
             return cCat === 'dept'; 
         }
 
-        // قراءة الرزم المطلوبة من الواجهة
         const levelsConfig = [];
         document.querySelectorAll('.wiz-level-input').forEach(inp => {
             const count = parseInt(inp.value) || 0;
@@ -11515,7 +11512,6 @@ window.executeAutoDistribution = function(dId) {
             }
         });
 
-        // قراءة ربط المدربين
         const courseInsMap = {};
         document.querySelectorAll('.wiz-course-ins:checked').forEach(cb => {
             const cName = cb.getAttribute('data-course');
@@ -11526,7 +11522,6 @@ window.executeAutoDistribution = function(dId) {
         const busyIns = {};  
         const busyRoom = {}; 
         
-        // حجز أوقات المدربين والقاعات المشغولة في الكلية لمنع التعارض
         getDepts().forEach(dept => {
             const scanGrid = (g) => {
                 g.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
@@ -11557,7 +11552,6 @@ window.executeAutoDistribution = function(dId) {
             configsByDept[tDept].push(conf);
         });
 
-        // تنفيذ التوزيع مع حماية مقررات الأقسام الأخرى
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             const targetDeptBundles = getBundles(targetDeptId);
 
@@ -11567,7 +11561,6 @@ window.executeAutoDistribution = function(dId) {
 
                 let matchingBundles = targetDeptBundles.filter(b => b.specId === conf.specId && b.level === conf.level);
 
-                // إنشاء الشعب الناقصة إذا لم تكن موجودة
                 for (let i = matchingBundles.length; i < conf.count; i++) {
                     const bId = genId();
                     const bName = `شعبة ${i + 1}`;
@@ -11578,7 +11571,18 @@ window.executeAutoDistribution = function(dId) {
                 }
 
                 const plan = getPlan(targetDeptId, conf.specId);
-                const courses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
+                const rawCourses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
+                
+                // 🛡️ تصفية المقررات المكررة في الخطة (بسبب ملفات SC04 التي تحتوي على تكرارات)
+                const uniqueCoursesMap = new Map();
+                rawCourses.forEach(c => {
+                    const key = (c.code || c.name).trim();
+                    if (!uniqueCoursesMap.has(key)) {
+                        uniqueCoursesMap.set(key, c);
+                    }
+                });
+                const courses = Array.from(uniqueCoursesMap.values());
+
                 if(courses.length === 0) return;
 
                 courses.sort((a,b) => (chByName[b.name]||2) - (chByName[a.name]||2));
@@ -11587,14 +11591,12 @@ window.executeAutoDistribution = function(dId) {
                     const bundle = matchingBundles[i];
                     const bGrid = getBundleGrid(bundle.id);
 
-                    // النظام يختار تلقائياً يوم الراحة لكل شعبة بالتناوب العشوائي لضمان التوازن
                     let bundleOffDay = null;
                     if (compress4Days) {
                         bundleOffDay = bundleGlobalIdx % DAYS.length;
                         bundleGlobalIdx++;
                     }
 
-                    // 🛡️ درع الحماية: مسح المقررات التابعة للمستخدم الحالي فقط بدقة!
                     bGrid.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
                         if (cell) {
                             const mainMine = isCourseMyResponsibility(cell, targetDeptId);
@@ -11618,12 +11620,17 @@ window.executeAutoDistribution = function(dId) {
                         }
                     }));
 
+                    const getDayLoad = (dayIndex) => {
+                        let load = 0;
+                        bGrid[dayIndex].forEach(cell => { if (cell && cell.subj) load++; });
+                        return load;
+                    };
+
                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
                         
-                        // إضافة هذا السطر لمنع أي مقرر عملي مستقل للفيزياء:
                         if (isPhysicsExempt && (c.name.includes('عملي') || c.name.includes('مختبر') || c.name.includes('معمل'))) return;
 
                         if (isPhysicsExempt) {
@@ -11635,35 +11642,26 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                      
-                        let assignedIns = null; // لتثبيت نفس المدرب لكلا اللقائين
-                        const usedDaysForCourse = new Set(); // ⛔ لتتبع الأيام ومنع التكرار في نفس اليوم
+                        let assignedIns = null; 
+                        const usedDaysForCourse = new Set(); 
 
                         for (let sess = 0; sess < sessionsNeeded; sess++) {
                             const isHalf = isSplitCourse && sess === (sessionsNeeded - 1);
                             const dur = isHalf ? 1 : 2;
                             let placed = false;
                                                     
-                            // بناء الأيام المرشحة للمحاضرة تلقائياً
                             let candidateDays = [];
                             if (compress4Days && bundleOffDay !== null) {
-                                // 1. الأيام الـ 4 التي اختارها النظام لهذه الشعبة
                                 const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay);
-                                
-                                // فحص الأيام التي لم يُسند إليها هذا المقرر بعد
                                 let preferred = preferredDays.filter(d => !usedDaysForCourse.has(d)).sort(() => Math.random() - 0.5);
-                                
-                                // 2. اليوم الخامس يوضع في نهاية القائمة كملاذ أخير عند التعارض
                                 let fallback = (!usedDaysForCourse.has(bundleOffDay)) ? [bundleOffDay] : [];
-                                
                                 candidateDays = [...preferred, ...fallback];
                             } else {
-                                // توزيع طبيعي على الـ 5 أيام
                                 candidateDays = [...Array(DAYS.length).keys()]
                                     .filter(d => !usedDaysForCourse.has(d))
                                     .sort(() => Math.random() - 0.5);
                             }
 
-                            // في حال نفاذ الأيام المتاحة للمقرر (حالة نادرة)، نبقي اليوم الخامس كخيار أخير
                             if (candidateDays.length === 0) {
                                 if (compress4Days && bundleOffDay !== null) {
                                     const preferredDays = [0, 1, 2, 3, 4].filter(d => d !== bundleOffDay).sort(() => Math.random() - 0.5);
@@ -11673,18 +11671,25 @@ window.executeAutoDistribution = function(dId) {
                                 }
                             }
 
-                            const shuffledPeriods = [...Array(P.length).keys()].sort(() => Math.random() - 0.5);
+                            // ترتيب الأيام لتجميع المحاضرات وتقليل الفراغات
+                            candidateDays.sort((a, b) => {
+                                const loadA = getDayLoad(a);
+                                const loadB = getDayLoad(b);
+                                if (loadA !== loadB) return loadB - loadA; 
+                                return 0;
+                            });
+
+                            // ترتيب صارم للصباح (م1 ثم م2 ثم م3)
+                            const prioritizedPeriods = [...Array(P.length).keys()];
 
                             outerLoop:
                             for (let di of candidateDays) {
-                                for (let pi of shuffledPeriods) {
+                                for (let pi of prioritizedPeriods) { 
                                     const timeKey = `${di}_${pi}`;
                                     
-                                    // 🛡️ إذا كانت الخلية محجوزة لمقرر دراسات عامة أو تخصص سابق
                                     if (bGrid[di][pi]) continue;
 
                                     let chosenIns = null;
-                                    // نفضل نفس المدرب الذي أخذ اللقاء الأول لنفس المادة
                                     const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
                                     const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
 
@@ -11718,14 +11723,14 @@ window.executeAutoDistribution = function(dId) {
                                         if (chosenIns) {
                                             if (!busyIns[chosenIns]) busyIns[chosenIns] = new Set();
                                             busyIns[chosenIns].add(timeKey);
-                                            assignedIns = chosenIns; // حفظ المدرب لإسناده في اللقاء التالي
+                                            assignedIns = chosenIns; 
                                         }
                                         if (chosenRoom) {
                                             if (!busyRoom[chosenRoom]) busyRoom[chosenRoom] = new Set();
                                             busyRoom[chosenRoom].add(timeKey);
                                         }
 
-                                        usedDaysForCourse.add(di); // 🔒 تسجيل اليوم لمنع وضع اللقاء الثاني في نفس اليوم
+                                        usedDaysForCourse.add(di); 
                                         placed = true;
                                         totalPlaced++;
                                         break outerLoop;
@@ -11745,14 +11750,13 @@ window.executeAutoDistribution = function(dId) {
         document.getElementById('autoDistWizardModal').style.display = 'none';
         renderDeptTabContent(dId);
         
-        showToastMsg(`✅ اكتمل التوزيع بنجاح مع الحفاظ الكامل على مقررات الأقسام الأخرى!`);
+        showToastMsg(`✅ اكتمل التوزيع بنجاح! تم ضغط الجدول في الصباح وتقليل الفراغات.`);
 
     } catch (err) {
         alert('حدث خطأ أثناء تنفيذ التوزيع: ' + err.message);
         console.error(err);
     }
 };
-
 // =========================================================================
 // ══ معالج رفع تقارير الوحدة التدريبية الشامل (للأدمن والوكيل) - المطور ══
 // =========================================================================
