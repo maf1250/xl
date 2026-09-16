@@ -1542,10 +1542,12 @@ function processSectionListCSV(dId, text){
   if(rows.length < 2) return;
   const header = rows[0].map(h => String(h == null ? '' : h).trim());
   
-  // عمود الرمز في ملف SS01 الذي أرفقته اسمه حرفياً "المقرر"
-  const iCode = header.indexOf('المقرر');
+  // 💡 فحص ذكي لكافة المسميات المحتملة لعمود رمز المقرر
+  // 💡 فحص صارم ومباشر لعمود الرمز
+  let iCode = header.findIndex(h => h === 'المقرر' || h === 'رمز المقرر' || h === 'كود المقرر');
+  if (iCode === -1) iCode = header.findIndex(h => h.includes('المقرر') && !h.includes('اسم') && !h.includes('وصف') && !h.includes('نوع'));
   const iName = findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
-  const iCrn = header.indexOf('الرقم المرجعي');
+  const iCrn = header.indexOf('الرقم المرجعي') > -1 ? header.indexOf('الرقم المرجعي') : findColIndex(header, ['مرجعي']);
   const iSectionType = findColIndex(header, ['نوع الشعبة', 'نوع التدريب']);
   const iSchedType = header.indexOf('نوع الجدولة');
   
@@ -1554,8 +1556,20 @@ function processSectionListCSV(dId, text){
   const typeMap = ls('pq_crn_type_map_'+dId, {});
   let typeMapChanged = false;
 
+  // استخراج كافة المقررات والرموز من خطط الكلية للاستنتاج التلقائي اللحظي
+  const allPlanCourses = [];
+  getDepts().forEach(d => {
+      getSpecs(d.id).forEach(sp => {
+          getPlan(d.id, sp.id).forEach(c => {
+              if (c.name && c.code) {
+                  allPlanCourses.push({ name: normName(c.name), code: c.code.trim() });
+              }
+          });
+      });
+  });
+
   rows.slice(1).forEach(r => {
-    const code = iCode > -1 ? String(r[iCode] == null ? '' : r[iCode]).trim() : '';
+    let code = iCode > -1 ? String(r[iCode] == null ? '' : r[iCode]).trim() : '';
     const desc = iName > -1 ? String(r[iName] == null ? '' : r[iName]).trim() : (code || 'مقرر');
     const crn = String(r[iCrn] == null ? '' : r[iCrn]).trim();
     if(!crn) return;
@@ -1568,7 +1582,13 @@ function processSectionListCSV(dId, text){
       level = match.course.level; 
     }
 
-    // البحث عن الشعبة بالرقم المرجعي أو بالرمز الموحد
+    // 💡 إذا كان الرمز مفقوداً في الملف، استنتجه تلقائياً من الخطة فوراً
+    if (!code) {
+        const targetName = normName(courseName);
+        const found = allPlanCourses.find(c => targetName.includes(c.name) || c.name.includes(targetName));
+        if (found) code = found.code;
+    }
+
     let sec = secs.find(s => s.crn === crn || (s.code && code && s.code === code && !s.crn));
     if(sec){
        sec.crn = crn;
@@ -1577,7 +1597,7 @@ function processSectionListCSV(dId, text){
        secs.push({ 
          id: genId(), 
          name: courseName, 
-         code: code || '', // 💡 حفظ الرمز الحرفي بدقة من عمود "المقرر"
+         code: code || '', // 💡 حفظ الرمز مؤكداً
          crn, 
          specId, 
          level, 
@@ -11052,8 +11072,10 @@ function parseBannerRows(rows){
   const header=rows[0].map(h=>String(h==null?'':h).trim());
   const exactIdx=name=>header.indexOf(name);
   const iCrn=exactIdx('الرقم المرجعي')>-1?exactIdx('الرقم المرجعي'):findColIndex(header,['مرجعي']);
-  const iCode=exactIdx('المقرر');
-  const iName=findColIndex(header,['اسم المقرر','وصف المقرر']);
+  // 💡 فحص صارم ومباشر لعمود الرمز (يجب ألا يلتقط عمود اسم المقرر أو وصفه)
+  let iCode = header.findIndex(h => h === 'المقرر' || h === 'رمز المقرر' || h === 'كود المقرر');
+  if (iCode === -1) iCode = header.findIndex(h => h.includes('المقرر') && !h.includes('اسم') && !h.includes('وصف') && !h.includes('نوع'));
+  const iName = findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
   const iDay=exactIdx('اليوم')>-1?exactIdx('اليوم'):findColIndex(header,['يوم']);
   const iTime=exactIdx('الوقت')>-1?exactIdx('الوقت'):findColIndex(header,['وقت']);
   const iEnrolled=exactIdx('مسجلين')>-1?exactIdx('مسجلين'):findColIndex(header,['مسجل']);
@@ -12723,7 +12745,19 @@ function submitUnitSS01() {
       if (loginTitle) loginTitle.textContent = detectedName;
     }
     
-    bannerRows.forEach(r => {
+ // تجميع خطط الكلية للمطابقة اللحظية
+    const allPlanCourses = [];
+    getDepts().forEach(d => {
+        getSpecs(d.id).forEach(sp => {
+            getPlan(d.id, sp.id).forEach(c => {
+                if (c.name && c.code) {
+                    allPlanCourses.push({ name: normName(c.name), code: c.code.trim() });
+                }
+            });
+        });
+    });
+
+   bannerRows.forEach(r => {
       let deptName = (r.dept || '').trim();
       if (!deptName) deptName = "قسم عام";
 
@@ -12747,20 +12781,47 @@ function submitUnitSS01() {
       }
 
       let secs = getSections(matchedDept.id);
-      let courseName = r.name || r.code;
-      const match = findPlanCourse(matchedDept.id, r.code);
-      if (match) courseName = match.course.name;
+      
+      // 💡 الرمز الحرفي القادم من ملف رايات مباشرة (مثل: رياض-101 أو رياض-121)
+      let rawCode = (r.code || '').trim();
+      let courseName = (r.name || '').trim();
 
-      if (!secs.find(s => s.name === courseName && s.crn === r.crn)) {
-        let sec = secs.find(s => s.name === courseName && !s.crn);
-        if (sec) { 
-            sec.crn = r.crn; 
-        } else {
-            secs.push({ id: genId(), name: courseName, crn: r.crn, specId: match ? match.spec.id : '', level: match ? match.course.level : '', capacity: r.capacity || DEFAULT_CAPACITY });
-            totalAdded++;
-        }
-        saveSections(matchedDept.id, secs);
+      // إذا كان الرمز يحتوي على اسم أو العكس نقوم بضبطهما
+      if (!courseName && rawCode) courseName = rawCode;
+
+      let specId = '';
+      let level = '';
+
+      // البحث في خطة القسم بالرمز الصريح أولاً لتحديد التخصص والمستوى واسم المقرر الرسمي
+      if (rawCode) {
+          const match = findPlanCourse(matchedDept.id, rawCode);
+          if (match) {
+              courseName = match.course.name;
+              specId = match.spec.id;
+              level = match.course.level;
+          }
       }
+
+      // 💡 التخزين والتحديث بناءً على الرقم المرجعي
+      let existingSec = secs.find(s => s.crn === r.crn);
+      if (existingSec) {
+          existingSec.code = rawCode; // تحديث الرمز بالرمز الصحيح القادم من الملف
+          if (courseName) existingSec.name = courseName;
+          if (specId) existingSec.specId = specId;
+          if (level) existingSec.level = level;
+      } else {
+          secs.push({ 
+              id: genId(), 
+              name: courseName, 
+              code: rawCode, // 💡 حفظ الرمز الحقيقي المستخرج من السطر
+              crn: r.crn, 
+              specId: specId, 
+              level: level, 
+              capacity: r.capacity || DEFAULT_CAPACITY 
+          });
+          totalAdded++;
+      }
+      saveSections(matchedDept.id, secs);
     });
 
     buildSidebar();
