@@ -12714,27 +12714,29 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                                            
-                 // 💡 سحب رقم مرجعي مستقل لكل رزمة ذات موعد مختلف
+             // 💡 قفل الأرقام المرجعية: لكل رزمة رقم مرجعي مستقل بمواعيدها المستقلة
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
                         const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                        let crnObj = null;
 
                         if (availableCrnList && availableCrnList.length > 0) {
-                            // 💡 1. الأولوية المطلقة: اختيار رقم مرجعي جديد كلياً لم يُستخدم في أي رزمة سابقة
-                            let crnObj = availableCrnList.find(x => x.used === 0);
+                            // 1. الأولوية المطلقة: رقم بكر لم يُستخدم في أي رزمة من قبل إطلاقاً (used === 0)
+                            crnObj = availableCrnList.find(x => x.used === 0);
 
-                            // 2. إذا لم تتوفر أرقام جديدة، نبحث عن رقم استخدم سابقاً بشرط وجود متسع بالسعة
+                            // 2. إذا نفدت الأرقام البكر تماماً، نسمح فقط بالأرقام التي لها متسع
                             if (!crnObj) {
                                 crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
                             }
 
+                            // 3. كحل أخير
                             if (!crnObj) {
                                 crnObj = availableCrnList[0];
                             }
 
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // زيادة استهلاك السعة
+                                crnObj.used += bStudents; // حجز السعة
                             }
                         } else {
                             missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
@@ -12777,6 +12779,27 @@ window.executeAutoDistribution = function(dId) {
 
                                     const timeKey = `${di}_${pi}`;
                                     if (bGrid[di][pi]) continue;
+                                  // 💡 حماية صارمة: منع وضع هذه الخلية إذا كان الرقم المرجعي مجدولاً مسبقاً في وقت مختلف
+                                    if (chosenCrn) {
+                                        const dupCheck = findCrnDuplicate(targetDeptId, bundle.id, di, pi, chosenCrn, c.name);
+                                        if (dupCheck) {
+                                            // الرقم مستخدم في موعد آخر! نبحث فوراً عن رقم بديل متاح وغير مستخدم في هذا الوقت
+                                            const altCrnObj = availableCrnList.find(x => {
+                                                if (x.crn === chosenCrn) return false;
+                                                return !findCrnDuplicate(targetDeptId, bundle.id, di, pi, x.crn, c.name);
+                                            });
+                                            if (altCrnObj) {
+                                                // تبديل الرقم للرقم السليم
+                                                crnObj.used = Math.max(0, crnObj.used - bStudents);
+                                                crnObj = altCrnObj;
+                                                chosenCrn = crnObj.crn;
+                                                crnObj.used += bStudents;
+                                            } else {
+                                                // لا يوجد رقم متوافق مع هذا الموعد، نتخطى هذا الموعد ونبحث عن موعد آخر
+                                                continue;
+                                            }
+                                        }
+                                    }
 
                                     let chosenIns = null;
                                     const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
