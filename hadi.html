@@ -12654,11 +12654,18 @@ window.executeAutoDistribution = function(dId) {
         function isCourseMyResponsibility(c, targetDeptId) {
             const cName = c.name || c.subj || '';
             const cCode = c.code || '';
-            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
+            
+            const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
+            const COMP_SHARED_EXACT = ['حاسب-101', 'حاسب-102', 'حاسب 101', 'حاسب 102', 'حال4102', 'حاسب100'];
+
+            const isReallySup = SUP_PREFIXES.some(p => cCode.startsWith(p)) || cCode === 'رياد-101' || (isSupCourseByName(cName, cCode) && !cCode);
+            const isReallyComp = COMP_SHARED_EXACT.some(p => cCode.includes(p)) || (isCompCourseByName(cName) && !cCode);
+
             if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) return false;
-            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
-            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
-            return cCat === 'dept'; 
+            
+            if (dId === 'sup') return isReallySup; 
+            if (dId === 'it') return (targetDeptId === 'it' && !isReallySup) || isReallyComp; 
+            return !isReallySup && !isReallyComp; 
         }
 
         // قراءة التخصصات والمستويات المختارة وسعتها
@@ -12684,7 +12691,7 @@ window.executeAutoDistribution = function(dId) {
             courseInsMap[cName].push(cb.value);
         });
 
-        // رصد انشغال المدربين والقاعات
+        // رصد انشغال المدربين والقاعات في الجداول الحالية
         const busyIns = {};  
         const busyRoom = {}; 
         
@@ -12733,56 +12740,45 @@ window.executeAutoDistribution = function(dId) {
             .replace(/ال/g, '')
             .trim();
 
-        // بناء خريطة استنتاج الرمز من الخطط المعتمدة للشعب التي لا تملك رمزاً مسجلاً
-        const courseNameToCodeList = {};
-        getDepts().forEach(d => {
-            getSpecs(d.id).forEach(sp => {
-                getPlan(d.id, sp.id).forEach(c => {
-                    if (c.name && c.code) {
-                        const nKey = normName(c.name);
-                        if (!courseNameToCodeList[nKey]) courseNameToCodeList[nKey] = [];
-                        const cKey = normCode(c.code);
-                        if (!courseNameToCodeList[nKey].includes(cKey)) {
-                            courseNameToCodeList[nKey].push(cKey);
-                        }
+        // 💡 خريطة مركزية لقفل مواعيد الأرقام المرجعية لحظياً لمنع تضاربها في أوقات مختلفة
+        const activeCrnSchedule = {}; // crn -> { di, pi, insId, roomId }
+
+        // قراءة المواعيد المحجوزة مسبقاً للأرقام المرجعية
+        getDepts().forEach(dept => {
+            getBundles(dept.id).forEach(b => {
+                const bg = getBundleGrid(b.id);
+                bg.forEach((dayArr, di) => dayArr.forEach((cell, pi) => {
+                    if (cell && cell.crn) {
+                        activeCrnSchedule[String(cell.crn).trim()] = { di, pi, insId: cell.insId, roomId: cell.roomId };
                     }
-                });
+                }));
             });
         });
 
         Object.entries(configsByDept).forEach(([targetDeptId, configs]) => {
             let targetDeptBundles = getBundles(targetDeptId);
             const targetDeptName = getDepts().find(d => d.id === targetDeptId)?.name || '';
-// 💡 بنك الأرقام المرجعية المبني على الرمز الدقيق حصراً (مع استخراج الرمز من كافة حقول الشعبة)
+
+            // 💡 بنك الأرقام المرجعية الدقيق
             const crnBank = {}; 
-            
-            // دالة استخراج الرمز الصريح حتى لو كان مدمجاً في الاسم أو مفقوداً
             const extractCourseCode = (sec) => {
                 if (sec.code && sec.code.trim()) return normCode(sec.code);
-                
-                // فحص إذا كان الاسم يحتوي على رمز مدمج مثل "انجل-101" أو "رياض-121"
                 const codeMatch = (sec.name || '').match(/([أ-يa-zA-Z]+[\-_ ]?[0-9٠-٩]{3})/);
                 if (codeMatch) return normCode(codeMatch[1]);
-
-                // إذا لم يوجد، نبحث عن هذا المقرر في خطط الكلية لمعرفة رمزه الدقيق
                 for (let d of getDepts()) {
                     for (let sp of getSpecs(d.id)) {
                         const foundCourse = getPlan(d.id, sp.id).find(c => normName(c.name) === normName(sec.name));
-                        if (foundCourse && foundCourse.code) {
-                            return normCode(foundCourse.code);
-                        }
+                        if (foundCourse && foundCourse.code) return normCode(foundCourse.code);
                     }
                 }
                 return '';
             };
 
-            // مسح شُعب كل الأقسام واستخراج أرقامها وربطها برمزها الصحيح
             getDepts().forEach(d => {
                 getSections(d.id).forEach(s => {
                     if (s.crn) {
                         const crnClean = String(s.crn).trim();
                         const finalCodeKey = extractCourseCode(s);
-
                         if (finalCodeKey) {
                             if (!crnBank[finalCodeKey]) crnBank[finalCodeKey] = [];
                             if (!crnBank[finalCodeKey].find(x => x.crn === crnClean)) {
@@ -12797,18 +12793,19 @@ window.executeAutoDistribution = function(dId) {
                     }
                 });
             });
-                  configs.forEach(conf => {
+
+            configs.forEach(conf => {
                 const sp = getSpecs(targetDeptId).find(s => s.id === conf.specId);
                 if(!sp) return;
 
-                // 💡 الحذف التلقائي الكامل للرزم القديمة وجداولها لهذا التخصص والمستوى
+                // 💡 حذف الرزم القديمة وجداولها لهذا التخصص والمستوى
                 const oldBundles = targetDeptBundles.filter(b => b.specId === conf.specId && b.level === conf.level);
                 oldBundles.forEach(ob => {
                     try { localStorage.removeItem('pq_bgrid_' + ob.id); } catch(e){}
                 });
                 targetDeptBundles = targetDeptBundles.filter(b => !(b.specId === conf.specId && b.level === conf.level));
 
-                // إنشاء رزم جديدة نظيفة بالعدد المطلوب
+                // إنشاء رزم جديدة بالعدد المطلوب
                 const matchingBundles = [];
                 for (let i = 0; i < conf.count; i++) {
                     const bId = genId();
@@ -12822,7 +12819,6 @@ window.executeAutoDistribution = function(dId) {
                 const plan = getPlan(targetDeptId, conf.specId);
                 const rawCourses = plan.filter(c => c.level === conf.level && isCourseMyResponsibility(c, targetDeptId));
                 
-                // تصفية المقررات بالرمز الموحد حصراً لمنع التكرار
                 const uniqueCoursesMap = new Map();
                 rawCourses.forEach(c => {
                     const key = normCode(c.code) || c.name.trim(); 
@@ -12853,7 +12849,7 @@ window.executeAutoDistribution = function(dId) {
                         return cnt; 
                     };
 
-            courses.forEach(c => {
+                    courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
@@ -12867,12 +12863,11 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
 
-                        // 💡 جلب الأرقام المتاحة لهذا المقرر
                         const targetCodeKey = normCode(c.code);
                         const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : [];
 
                         if (availableCrnList.length === 0) {
-                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر.`);
+                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
                         }
 
                         let assignedIns = null; 
@@ -12894,7 +12889,7 @@ window.executeAutoDistribution = function(dId) {
                             let preferredDays = candidateDays.filter(d => d !== bundleOffDay);
                             let fallbackDays = candidateDays.filter(d => d === bundleOffDay);
 
-                            preferredDays.sort((a, b) => getDayLoad(a) - getDayLoad(b)); // تفضيل الأيام الأقل ضغطاً
+                            preferredDays.sort((a, b) => getDayLoad(a) - getDayLoad(b));
                             let finalDays = [...preferredDays, ...fallbackDays];
                             const prioritizedPeriods = [...Array(P.length).keys()].sort((a, b) => a - b); 
 
@@ -12906,58 +12901,72 @@ window.executeAutoDistribution = function(dId) {
                                     const timeKey = `${di}_${pi}`;
                                     if (bGrid[di][pi]) continue;
 
-                                    // 💡 البحث عن مدرب متاح
-                                    let chosenIns = null;
-                                    const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
-                                    const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
-
-                                    for (let insId of shuffledIns) {
-                                        if (!busyIns[insId] || !busyIns[insId].has(timeKey)) {
-                                            chosenIns = insId;
-                                            break;
-                                        }
-                                    }
-                                    if (!chosenIns && allowedInsIds.length > 0) continue;
-
-                                    // 💡 البحث عن قاعة متاحة
-                                    let chosenRoom = null;
-                                    const assignedInsObj = chosenIns ? getInstructors(dId).find(i => i.id === chosenIns) : null;
-                                    if (assignedInsObj && assignedInsObj.defaultRoomId && (!busyRoom[assignedInsObj.defaultRoomId] || !busyRoom[assignedInsObj.defaultRoomId].has(timeKey))) {
-                                        chosenRoom = assignedInsObj.defaultRoomId;
-                                    } else {
-                                        const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
-                                        for (let rm of shuffledRooms) {
-                                            if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
-                                                chosenRoom = rm.id;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    if (!chosenRoom && rooms.length > 0) continue; // تخطي إذا لم توجد قاعة
-
-                                    // 💡 اختيار رقم مرجعي متوافق تماماً مع هذا الوقت (يمنع التعارض)
+                                    // 💡 فحص واختيار رقم مرجعي متوافق زمنياً لحظياً (يمنع التعارض ويدعم الدمج المتزامن)
                                     let chosenCrn = '';
                                     let matchedCrnObj = null;
 
-                                    // 1. فحص الأرقام المتاحة: هل يوجد رقم جديد أو رقم مشترك في نفس هذا الموعد؟
                                     for (let crnCandidate of availableCrnList) {
                                         if ((crnCandidate.cap - crnCandidate.used) < bStudents) continue;
                                         
-                                        // فحص هل هذا الرقم محجوز في موعد مختلف؟
-                                        const dup = findCrnDuplicate(targetDeptId, bundle.id, di, pi, crnCandidate.crn, c.name);
-                                        if (!dup) {
+                                        const lockedSlot = activeCrnSchedule[crnCandidate.crn];
+                                        if (lockedSlot) {
+                                            // إذا كان الرقم مستخدماً مسبقاً، نلزم المعالج بنفس اليوم ونفس الحصة حصراً
+                                            if (lockedSlot.di === di && lockedSlot.pi === pi) {
+                                                matchedCrnObj = crnCandidate;
+                                                chosenCrn = crnCandidate.crn;
+                                                break;
+                                            }
+                                        } else {
+                                            // رقم بكر متاح لأي موعد
                                             matchedCrnObj = crnCandidate;
                                             chosenCrn = crnCandidate.crn;
                                             break;
                                         }
                                     }
 
-                                    // إذا لم نجد رقماً متوافقاً مع هذا التوقيت، نبحث في أوقات أخرى
-                                    if (!chosenCrn && availableCrnList.length > 0) {
-                                        continue;
+                                    // إذا كان التوقيت الحالي لا يتوافق مع الأرقام المشتركة، نتخطى ونبحث في موعد آخر
+                                    if (!chosenCrn && availableCrnList.length > 0) continue;
+
+                                    // 💡 اختيار المدرب
+                                    let chosenIns = null;
+                                    const lockedSlot = chosenCrn ? activeCrnSchedule[chosenCrn] : null;
+
+                                    // في حال الدمج نأخذ نفس المدرب مسبقاً
+                                    if (lockedSlot && lockedSlot.insId) {
+                                        chosenIns = lockedSlot.insId;
+                                    } else {
+                                        const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
+                                        const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
+
+                                        for (let insId of shuffledIns) {
+                                            if (!busyIns[insId] || !busyIns[insId].has(timeKey)) {
+                                                chosenIns = insId;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (!chosenIns && allowedInsIds.length > 0) continue;
+
+                                    // 💡 اختيار القاعة
+                                    let chosenRoom = null;
+                                    if (lockedSlot && lockedSlot.roomId) {
+                                        chosenRoom = lockedSlot.roomId; // نفس القاعة المدمجة
+                                    } else {
+                                        const assignedInsObj = chosenIns ? getInstructors(dId).find(i => i.id === chosenIns) : null;
+                                        if (assignedInsObj && assignedInsObj.defaultRoomId && (!busyRoom[assignedInsObj.defaultRoomId] || !busyRoom[assignedInsObj.defaultRoomId].has(timeKey))) {
+                                            chosenRoom = assignedInsObj.defaultRoomId;
+                                        } else {
+                                            const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
+                                            for (let rm of shuffledRooms) {
+                                                if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
+                                                    chosenRoom = rm.id;
+                                                    break;
+                                                }
+                                            }
+                                        }
                                     }
 
-                                    // 💡 تسكين الخلية بنجاح
+                                    // 💡 تسكين الخلية وتثبيت الرقم المرجعي بالذاكرة اللحظية
                                     bGrid[di][pi] = {
                                         subj: c.name,
                                         code: c.code || '',
@@ -12968,6 +12977,10 @@ window.executeAutoDistribution = function(dId) {
                                         halfOnly: isHalf ? true : undefined,
                                         cellType: currentSessType  
                                     };
+
+                                    if (chosenCrn) {
+                                        activeCrnSchedule[chosenCrn] = { di, pi, insId: chosenIns, roomId: chosenRoom };
+                                    }
 
                                     if (matchedCrnObj) {
                                         matchedCrnObj.used += bStudents;
@@ -12990,7 +13003,7 @@ window.executeAutoDistribution = function(dId) {
                             }
 
                             if (!placedThisSession) {
-                                missingCrnsLog.add(`- ${c.name} في [${fullBundleContext}]: تعذر إيجاد وقت وقاعة شاغرة بدون تعارض لإكمال اللقاء (${sess + 1} من ${sessionsToPlace}).`);
+                                missingCrnsLog.add(`- ${c.name} في [${fullBundleContext}]: تعذر إيجاد موعد أو مدرب شاغر بدون تعارض لإكمال اللقاء (${sess + 1} من ${sessionsToPlace}). تأكد من تحديد مدربين متاحين.`);
                             }
                         }
                     });
@@ -13013,12 +13026,12 @@ window.executeAutoDistribution = function(dId) {
             <div class="modal-overlay open" id="crnMissingModal" style="z-index: 10000; align-items: center; justify-content: center; display: flex;">
                 <div class="modal" style="max-width: 650px; direction: rtl; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);">
                     <div class="modal-head" style="background: linear-gradient(135deg, #d97706, #b45309);">
-                        <h2 style="display:flex; align-items:center; gap:8px;">⚠️ تنبيه: تقرير الأرقام المرجعية</h2>
+                        <h2 style="display:flex; align-items:center; gap:8px;">⚠️ تنبيه: تقرير المعالج الآلي</h2>
                         <button class="modal-close" onclick="document.getElementById('crnMissingModal').remove()">✕</button>
                     </div>
                     <div class="modal-body">
                         <p style="font-size:13px; color:var(--tx); margin-bottom:12px; font-weight:bold;">
-                            تم حذف الرزم القديمة وبناؤها وتوزيعها بنجاح حسب الرموز، وتوجد الملاحظات التالية:
+                            تم توزيع الرزم بنجاح، وتوجد الملاحظات التالية:
                         </p>
                         <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; max-height:280px; overflow-y:auto; margin-bottom:12px; font-size:12px; color:#92400e; line-height:1.6;">
                             ${logHtml}
@@ -13028,9 +13041,9 @@ window.executeAutoDistribution = function(dId) {
                 </div>
             </div>`;
             document.body.insertAdjacentHTML('beforeend', modalHtml);
-            showToastMsg(`✅ تم إعادة إنشاء الرزم وتوزيعها بالرموز.`);
+            showToastMsg(`✅ تم التوزيع بنجاح.`);
         } else {
-            showToastMsg(`✅ تم التوزيع بنجاح كامل وحذف الرزم القديمة.`);
+            showToastMsg(`✅ تم التوزيع بنجاح كامل بدون أي تعارض.`);
         }
 
     } catch (err) {
