@@ -3220,6 +3220,7 @@ function setupHTML(deptId){
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('${type}','${deptId}','${x.id}')">🗑️</button>
   </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
   
+  // 1. قائمة الشُعب
   const sectionsListHTML=secs.length?secs.map(x=>{
     const specName=x.specId?(specs.find(s=>s.id===x.specId)||{}).name:'';
     const meta=`<div class="rcm">${specName?`<span class="badge bb">${esc(specName)}</span>`:''}${x.level?`<span class="badge bg">${esc(x.level)}</span>`:''}<span class="badge ${x.crn?'bp':'br'}">🔢 ${x.crn?esc(x.crn):'بدون رقم مرجعي'}</span><span class="badge bw">👥 ${x.capacity!==undefined?x.capacity:DEFAULT_CAPACITY}</span></div>`;
@@ -3231,14 +3232,16 @@ function setupHTML(deptId){
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('section','${deptId}','${x.id}')">🗑️</button>
   </div>`;
   }).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
- const insListHTML=ins.length?ins.map(x=>{
+
+  // 2. قائمة المدربين
+  const insListHTML = ins.length ? ins.map(x => {
     const defRoom = rooms.find(r => r.id === x.defaultRoomId);
     const defRoomBadge = defRoom ? `<span class="badge bg" style="font-size:10px">🚪 قاعة: ${esc(defRoom.name)}</span>` : '';
     return `<div class="rc"><span class="rci">👨‍🏫</span>
       <div class="rcb">
         <div class="rct">${esc(x.name)}</div>
         <div class="rcm">
-          ${x.empNo?`<span class="badge bb">🔢 ${esc(x.empNo)}</span>`:''}
+          ${x.empNo ? `<span class="badge bb">🔢 ${esc(x.empNo)}</span>` : ''}
           ${defRoomBadge}
         </div>
       </div>
@@ -3247,8 +3250,14 @@ function setupHTML(deptId){
       <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('instructor','${deptId}','${x.id}')">✏️</button>
       <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('instructor','${deptId}','${x.id}')">🗑️</button>
     </div>`;
-  }).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
-  const specOptions=specs.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  }).join('') : '<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
+
+  // 3.  قائمة القاعات 
+  const roomsListHTML = rooms.length ? rooms.map(x => `<div class="rc"><span class="rci">🚪</span><div class="rcb"><div class="rct">${esc(x.name)}</div>${x.building ? `<div class="rcm"><span class="badge bb">🏢 مبنى ${esc(x.building)}</span></div>` : ''}</div>
+    <button class="bedt" style="padding:4px 8px;font-size:11px" title="رقم المبنى" onclick="editRoomBuilding('${deptId}','${x.id}')">🏢</button>
+    <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('room','${deptId}','${x.id}')">✏️</button>
+    <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('room','${deptId}','${x.id}')">🗑️</button>
+  </div>`).join('') : '<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';  const specOptions=specs.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const missingRoomsCount=countMissingRooms(deptId);
   return `${plansHTML(deptId)}<div class="g3 g4">
     <div class="panel"><h3 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">   <span>📘 الشعب (${secs.length})</span>   <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">     <button class="bgr" style="font-size:11px;padding:4px 10px;background:#0284c7" onclick="autoFixMissingSectionCodes('${deptId}')" title="يقوم بمطابقة الشعب مع الخطط وتوليد الرموز المفقودة فوراً">🪄 استنتاج الرموز المفقودة</button>     <span class="badge ${missingRoomsCount>0?'br':'bg'}" style="font-size:11px">🚪 ${missingRoomsCount>0?missingRoomsCount+' محاضرة بدون قاعة':'✅ كل المحاضرات لها قاعة'}</span>     <button class="bdng" style="font-size:11px;padding:4px 10px" onclick="clearAllData('${deptId}')">🗑️ حذف جميع البيانات</button>   </div> </h3><div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center"><span class="badge ${missingRoomsCount>0?'br':'bg'}" style="font-size:11px" title="يبيّن عدد المحاضرات اللي ما لها قاعة معيّنة بعد ضمن مقررات القسم">🚪 ${missingRoomsCount>0?missingRoomsCount+' محاضرة بدون قاعة (مقررات القسم)':'✅ كل المحاضرات لها قاعة'}</span>${deptId==='it'?`<label class="bpri" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:4px 10px;border-radius:6px" title="ترفع ملف CSV (من نظام رايات - تقارير رايات) فيه أرقام مرجعية جاهزة لحاسب-101/102 لاستخدامها لاحقاً بسرعة عند تعيين المحاضرات">📥 استيراد أرقام حاسب-101/102<input type="file" accept=".csv" style="display:none" onchange="importComputerCrnPool(this,'${deptId}')"/></label>`:''}${`<button class="bdng" style="font-size:11px;padding:4px 10px" onclick="clearAllData('${deptId}')" title="⚠️ يحذف نهائياً كل الشعب والرزم والمدربين والقاعات وجداولها من هذا القسم بالكامل — الشعب/الرزم تختفي من القائمة تمامًا (خطط القسم تبقى كما هي)">🗑️ حذف جميع البيانات</button>`}</div></h3>
