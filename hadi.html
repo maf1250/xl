@@ -13423,7 +13423,7 @@ function closeUnitReportsWizard() {
   if (modal) modal.style.display = 'none';
 }
 
-  // 💡 دالة تحديد قاعة افتراضية ثابتة للمدرب يدوياً
+// 💡 فتح نافذة Modal احترافية لاختيار القاعة الافتراضية للمدرب
 window.assignDefaultRoomPrompt = function(deptId, insId) {
   const insList = getInstructors(deptId);
   const ins = insList.find(i => i.id === insId);
@@ -13431,34 +13431,79 @@ window.assignDefaultRoomPrompt = function(deptId, insId) {
 
   const rooms = getRooms(deptId);
   if (!rooms.length) {
-    showToastMsg('⚠️ لا توجد قاعات مسجلة في هذا القسم.');
+    showToastMsg('⚠️ لا توجد قاعات مسجلة في هذا القسم. أضف قاعات أولاً.');
     return;
   }
 
-  let promptText = `اختر القاعة الافتراضية للمدرب "${ins.name}":\n\n0) بدون قاعة افتراضية\n`;
-  rooms.forEach((r, idx) => {
-    promptText += `${idx + 1}) قاعة: ${r.name} ${r.building ? `(مبنى ${r.building})` : ''}\n`;
-  });
-  promptText += `\nأدخل رقم الخيار:`;
+  // بناء خيارات القاعات
+  const roomOptions = rooms.map(r => {
+    const isSelected = (ins.defaultRoomId === r.id);
+    const bldText = r.building ? ` (مبنى ${esc(r.building)})` : '';
+    return `<option value="${r.id}" ${isSelected ? 'selected' : ''}>🚪 قاعة: ${esc(r.name)}${bldText}</option>`;
+  }).join('');
 
-  const choice = prompt(promptText);
-  if (choice === null) return;
-
-  const num = parseInt(choice);
-  if (isNaN(num) || num < 0 || num > rooms.length) {
-    showToastMsg('❌ اختيار غير صحيح.');
-    return;
+  let modal = document.getElementById('defaultRoomModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'defaultRoomModal';
+    modal.className = 'modal-overlay';
+    document.body.appendChild(modal);
   }
 
-  if (num === 0) {
+  modal.innerHTML = `
+    <div class="modal" style="max-width:440px;direction:rtl">
+      <div class="modal-head" style="background:linear-gradient(135deg, #0d9488, #0f766e)">
+        <h2>🚪 تحديد القاعة الافتراضية</h2>
+        <button class="modal-close" onclick="closeModal('defaultRoomModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#0f766e">
+          <strong>المدرّب:</strong> <span style="font-size:13px;font-weight:700">${esc(ins.name)}</span>
+          ${ins.empNo ? `<br><small>الرقم الوظيفي: ${esc(ins.empNo)}</small>` : ''}
+        </div>
+        
+        <div class="fld">
+          <label style="font-weight:700">اختر القاعة الافتراضية (الثابتة)</label>
+          <select id="modal-def-room-select" style="width:100%;padding:9px;font-size:13px;border:1.5px solid var(--bd);border-radius:8px;background:#fff;margin-top:4px">
+            <option value="">— بدون قاعة افتراضية (إلغاء التثبيت) —</option>
+            ${roomOptions}
+          </select>
+          <div style="font-size:11px;color:var(--mu);margin-top:5px;line-height:1.5">
+            💡 سيقوم المعالج الآلي بوضع محاضرات هذا المدرب في هذه القاعة تلقائياً كلما كانت شاغرة.
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:18px;border-top:1px solid var(--bd);padding-top:12px">
+          <button class="bpri" style="background:#0d9488;flex:1" onclick="saveDefaultRoomModal('${deptId}','${insId}')">💾 حفظ القاعة</button>
+          <button class="bsec" onclick="closeModal('defaultRoomModal')">إلغاء</button>
+        </div>
+      </div>
+    </div>
+  `;
+  openModal('defaultRoomModal');
+};
+
+// دالة حفظ القاعة المختارة من الـ Modal
+window.saveDefaultRoomModal = function(deptId, insId) {
+  const sel = document.getElementById('modal-def-room-select');
+  if (!sel) return;
+
+  const insList = getInstructors(deptId);
+  const ins = insList.find(i => i.id === insId);
+  if (!ins) return;
+
+  const chosenRoomId = sel.value;
+  if (!chosenRoomId) {
     delete ins.defaultRoomId;
     showToastMsg(`✅ تم إلغاء القاعة الافتراضية للمدرب ${ins.name}`);
   } else {
-    ins.defaultRoomId = rooms[num - 1].id;
-    showToastMsg(`✅ تم تعيين القاعة (${rooms[num - 1].name}) للمدرب ${ins.name}`);
+    ins.defaultRoomId = chosenRoomId;
+    const room = getRooms(deptId).find(r => r.id === chosenRoomId);
+    showToastMsg(`✅ تم تعيين قاعة (${room ? room.name : ''}) للمدرب ${ins.name}`);
   }
 
   saveInstructors(deptId, insList);
+  closeModal('defaultRoomModal');
   renderDeptTabContent(deptId);
 };
 
