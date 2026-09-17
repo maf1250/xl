@@ -1179,6 +1179,7 @@ function findRoomConflict(dId,entityId,di,pi,roomId){
 // نفس الرقم لمقرر مختلف أو كيان مختلف = تعارض — يُفحص عبر كل الأقسام لأن مقررات مشتركة (حاسب-101/102)
 // قد يتكرر رقمها المرجعي خطأً بقسم مختلف تمامًا
 // 💡 فحص تعارض الرقم المرجعي: يمنع استخدام نفس الرقم في مواعيد مختلفة
+// 💡 فحص تعارض الرقم المرجعي مع إظهار المسار الكامل (القسم + التخصص + المستوى + الشعبة)
 function findCrnDuplicate(dId, entityId, di, pi, crn, currentSubj){
   if(!crn) return null;
   const crnClean = String(crn).trim();
@@ -1193,9 +1194,10 @@ function findCrnDuplicate(dId, entityId, di, pi, crn, currentSubj){
           const cell = g[d] && g[d][p];
           if(!cell || !cell.crn || String(cell.crn).trim() !== crnClean) continue;
           
-          // إذا كان نفس الرقم المرجعي ولكن في (يوم مختلف) أو (حصة مختلفة) = تعارض قطعي
           if(d !== di || p !== pi){
-            return { name: `${s.name} في موعد مختلف (${DAYS[d]} م${p+1})` };
+            const spName = getSpecNameById(s.specId) || '';
+            const path = `[${dept.name} ${spName ? '- ' + spName : ''} ${s.level ? '/ ' + s.level : ''} - شعبة: ${s.name}]`;
+            return { name: `${path} في موعد مختلف (${DAYS[d]} م${p+1})` };
           }
         }
       }
@@ -1209,12 +1211,12 @@ function findCrnDuplicate(dId, entityId, di, pi, crn, currentSubj){
           const cell = g[d] && g[d][p];
           if(!cell || !cell.crn || String(cell.crn).trim() !== crnClean) continue;
 
-          // إذا كان في نفس الرزمة (اللقاء الثاني) نسمح به طبعاً
-          if(b.id === entityId) continue;
+          if(b.id === entityId) continue; // نفس الرزمة في اللقاء الثاني مسموح
 
-          // إذا كان لرزمة أخرى وفي موعد مختلف = تعارض قطعي
           if(d !== di || p !== pi){
-            return { name: `رزمة [${b.name}] في موعد مختلف (${DAYS[d]} م${p+1})` };
+            const spName = getSpecNameById(b.specId) || '';
+            const path = `[${dept.name} ${spName ? '- ' + spName : ''} ${b.level ? '/ ' + b.level : ''} - رزمة: ${b.name}]`;
+            return { name: `${path} في موعد مختلف (${DAYS[d]} م${p+1})` };
           }
         }
       }
@@ -12712,29 +12714,27 @@ window.executeAutoDistribution = function(dId) {
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
                                            
+                 // 💡 سحب رقم مرجعي مستقل لكل رزمة ذات موعد مختلف
                         let chosenCrn = '';
                         const targetCodeKey = normCode(c.code);
-
-                      const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
+                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
 
                         if (availableCrnList && availableCrnList.length > 0) {
-                            // 💡 1. الأولوية القصوى: اختيار رقم جديد كلياً لم يُستخدم في أي رزمة سابقة (used === 0)
-                            // لضمان استقلال مواعيد وأوقات كل رزمة عن الأخرى
-                            let crnObj = availableCrnList.find(x => x.used === 0 && x.cap >= bStudents);
+                            // 💡 1. الأولوية المطلقة: اختيار رقم مرجعي جديد كلياً لم يُستخدم في أي رزمة سابقة
+                            let crnObj = availableCrnList.find(x => x.used === 0);
 
-                            // 2. إذا لم يتوفر رقم جديد وكانت الأرقام محدودة، نبحث عن رقم يتسع بالسعة
+                            // 2. إذا لم تتوفر أرقام جديدة، نبحث عن رقم استخدم سابقاً بشرط وجود متسع بالسعة
                             if (!crnObj) {
                                 crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
                             }
 
-                            // 3. كحل أخير إذا نفدت كل المقاعد في كل الأرقام
                             if (!crnObj) {
                                 crnObj = availableCrnList[0];
                             }
 
                             if (crnObj) {
                                 chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // خصم مقاعد الرزمة من سعة الشعبة
+                                crnObj.used += bStudents; // زيادة استهلاك السعة
                             }
                         } else {
                             missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
