@@ -1713,9 +1713,12 @@ function isSharedComputerCourseName(subjName){
   return buildSupItNameSets().itNames.has(subjName);
 }
 // مقررات ريادة الأعمال تُسنَد لمدربي وقاعات قسم تقنية الأعمال حصراً أينما جُدولت (حاسب، ميكانيكا، إلكترونيات...)
-const BIZ_ONLY_COURSE_NAMES=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];
-function isBizOnlyCourseName(subjName){return !!subjName&&BIZ_ONLY_COURSE_NAMES.includes(subjName);}
+const BIZ_ONLY_COURSES = [];
+const BIZ_ONLY_COURSE_NAMES = [];
 
+function isBizOnlyCourseName(subjName) {
+  return false;
+}
 // 💡 تحديد القسم المسؤول عن المقرر (رياد-101 دائماً للدراسات العامة)
 function getCoursePoolDept(subjName, currentDeptId, courseCode){
   const codeClean = normCode(courseCode || '');
@@ -5765,14 +5768,30 @@ function masterTabHTML(dId){
   const {supNames,itNames,supExclude}=buildSupItNameSets();
 
   const isSup=dId==='sup',isIt=dId==='it';
-  const BIZ_ONLY_COURSES=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];
-  function belongs(subj,srcDeptId){
-    if(BIZ_ONLY_COURSES.includes(subj))return dId==='biz';
-    if(isSup)return supNames.has(subj)&&!supExclude.has(subj);
-    if(isIt)return itNames.has(subj);
-    if(srcDeptId!==undefined&&srcDeptId!==dId)return false;
-    // القسم العادي: يعرض المقررات التي ليست sup أو التي استُثنيت من sup
-    return (!supNames.has(subj)&&!itNames.has(subj))||supExclude.has(subj);
+const BIZ_ONLY_COURSES = [];
+function belongs(subj, srcDeptId, cCode){
+      const codeClean = normCode(cCode || '');
+      const hasIT = getDepts().some(d => d.id === 'it');
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
+
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
+      if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
+          return isSup;
+      }
+
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
+      if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
+          return srcDeptId === dId;
+      }
+
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+      
+      // 4. الحاسب المشترك
+      if (isIt) return sets.itNames.has(subj);
+      
+      if (srcDeptId !== undefined && srcDeptId !== dId) return false;
+      return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
   }
   // بناء بيانات الجدول: مدرب × (يوم × محاضرة)
   // قسم تقنية الأعمال يفحص كل الأقسام أيضاً لأنه يملك حصرياً مقررات ريادة الأعمال أينما جُدولت
@@ -5983,29 +6002,23 @@ function masterTabHTMLGrid(dId,supNamesOverride,itNamesOverride){
 function belongs(subj, srcDeptId, cCode){
       const codeClean = normCode(cCode || '');
       const hasIT = getDepts().some(d => d.id === 'it');
-      
-      // 💡 تعريف sets لمنع خطأ ReferenceError
-      const sets = buildSupItNameSets();
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
 
       // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
       if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
-          return isSup; // يظهر فقط في جدول قسم الدراسات العامة
+          return isSup;
       }
 
-      // 2. بقية مقررات ريادة الأعمال (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
       if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
           return srcDeptId === dId;
       }
 
       // 3. الدراسات العامة
-      if (isSup) {
-          return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
-      }
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
       
       // 4. الحاسب المشترك
-      if (isIt) {
-          return sets.itNames.has(subj);
-      }
+      if (isIt) return sets.itNames.has(subj);
       
       if (srcDeptId !== undefined && srcDeptId !== dId) return false;
       return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
@@ -6087,13 +6100,14 @@ function printMasterInsGrid(dId){
 function belongs(subj, srcDeptId, cCode){
       const codeClean = normCode(cCode || '');
       const hasIT = getDepts().some(d => d.id === 'it');
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
 
       // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
       if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
-          return isSup; // يظهر فقط إذا كنا في جدول قسم الدراسات العامة
+          return isSup;
       }
 
-      // 2. بقية مقررات ريادة الأعمال (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
       if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
           return srcDeptId === dId;
       }
@@ -6203,17 +6217,29 @@ function exportMasterExcel(dId){
   const supNames=new Set();getSpecs('sup').forEach(sp=>getPlan('sup',sp.id).forEach(c=>{if(c.name)supNames.add(c.name);}));
   const itNames=new Set();getDepts().forEach(d=>getSpecs(d.id).forEach(sp=>getPlan(d.id,sp.id).forEach(c=>{if(c.code&&c.code.startsWith('حاسب-'))itNames.add(c.name);})));
   const hasIT = getDepts().some(d => d.id === 'it');
-  function belongs(subj,srcDeptId){
-      const EX=['أساسيات ريادة الأعمال','ريادة الأعمال','ورشة تأهيلية','ورشة التأهيل'];
-      const BIZ_ONLY=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];
-      if(BIZ_ONLY.includes(subj)) return dId==='biz';
+function belongs(subj, srcDeptId, cCode){
+      const codeClean = normCode(cCode || '');
+      const hasIT = getDepts().some(d => d.id === 'it');
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
+
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
+      if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
+          return isSup;
+      }
+
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
+      if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
+          return srcDeptId === dId;
+      }
+
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
       
-      // الدراسات يرى مقرراته، ويرى الحاسب إذا لم يوجد قسم حاسب
-      if(isSup) return (supNames.has(subj) && !EX.includes(subj)) || (!hasIT && itNames.has(subj));
+      // 4. الحاسب المشترك
+      if (isIt) return sets.itNames.has(subj);
       
-      if(isIt) return itNames.has(subj);
-      if(srcDeptId!==undefined&&srcDeptId!==dId) return false;
-      return (!supNames.has(subj)&&!itNames.has(subj))||EX.includes(subj);
+      if (srcDeptId !== undefined && srcDeptId !== dId) return false;
+      return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
   }
   const insMap={};
   const srcs=(isSup||isIt||dId==='biz')?allDepts:[{id:dId}];
@@ -6498,7 +6524,30 @@ function printGrid(dId,mode){
   // master grid
   const {supNames,itNames}=buildSupItNameSets();
   const isSup=dId==='sup',isIt=dId==='it';
-  function belongs(s,srcDeptId){const EX=['أساسيات ريادة الأعمال','ريادة الأعمال','ورشة تأهيلية','ورشة التأهيل'];const BIZ_ONLY=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];if(BIZ_ONLY.includes(s))return dId==='biz';if(isSup)return supNames.has(s)&&!EX.includes(s);if(isIt)return itNames.has(s);if(srcDeptId!==undefined&&srcDeptId!==dId)return false;return (!supNames.has(s)&&!itNames.has(s))||EX.includes(s);}
+function belongs(subj, srcDeptId, cCode){
+      const codeClean = normCode(cCode || '');
+      const hasIT = getDepts().some(d => d.id === 'it');
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
+
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
+      if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
+          return isSup;
+      }
+
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
+      if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
+          return srcDeptId === dId;
+      }
+
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+      
+      // 4. الحاسب المشترك
+      if (isIt) return sets.itNames.has(subj);
+      
+      if (srcDeptId !== undefined && srcDeptId !== dId) return false;
+      return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
+  }
   const grid=DAYS.map(()=>P.map(()=>[]));
   const srcs=(isSup||isIt||dId==='biz')?getDepts():[{id:dId}];
   srcs.forEach(dept=>{
@@ -11055,7 +11104,30 @@ function exportMasterWordGrid(dId){
   const isSup=dId==='sup',isIt=dId==='it';
   const supNames=new Set();getSpecs('sup').forEach(sp=>getPlan('sup',sp.id).forEach(c=>{if(c.name)supNames.add(c.name);}));
   const itNames=new Set();getDepts().forEach(d=>getSpecs(d.id).forEach(sp=>getPlan(d.id,sp.id).forEach(c=>{if(c.code&&c.code.startsWith('حاسب-'))itNames.add(c.name);})));
-  function belongs(s,srcDeptId){const EX=['أساسيات ريادة الأعمال','ريادة الأعمال','ورشة تأهيلية','ورشة التأهيل'];const BIZ_ONLY=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];if(BIZ_ONLY.includes(s))return dId==='biz';if(isSup)return supNames.has(s)&&!EX.includes(s);if(isIt)return itNames.has(s);if(srcDeptId!==undefined&&srcDeptId!==dId)return false;return (!supNames.has(s)&&!itNames.has(s))||EX.includes(s);}
+function belongs(subj, srcDeptId, cCode){
+      const codeClean = normCode(cCode || '');
+      const hasIT = getDepts().some(d => d.id === 'it');
+      const sets = buildSupItNameSets(); // 💡 تمنع الخطأ في كل مكان
+
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
+      if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
+          return isSup;
+      }
+
+      // 2. بقية مقررات ريادة الأعمال تتبع قسمها التخصصي
+      if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
+          return srcDeptId === dId;
+      }
+
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+      
+      // 4. الحاسب المشترك
+      if (isIt) return sets.itNames.has(subj);
+      
+      if (srcDeptId !== undefined && srcDeptId !== dId) return false;
+      return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
+  }
   const insMap={};
   const srcs=(isSup||isIt||dId==='biz')?allDepts:[{id:dId}];
   srcs.forEach(dept=>{
@@ -11719,7 +11791,7 @@ function buildSupItNameSets(){
 // يتحقق إن كان المقرر يخص القسم فعلياً (مو دراسات عامة ولا حاسب مشترك) — ومقررات ريادة الأعمال تُسنَد لقسم تقنية الأعمال حصراً أياً كان القسم المجدولة فيه
 function isDeptOwnCourseName(subj, sets, dId) {
   if (!subj) return false;
-  const BIZ_ONLY_COURSES = ['أساسيات ريادة الأعمال', 'ريادة الأعمال', 'مبادئ ريادة الأعمال'];
+const BIZ_ONLY_COURSES = [];
   if (BIZ_ONLY_COURSES.includes(subj)) return dId === 'biz';
 
   const hasIT = getDepts().some(d => d.id === 'it');
