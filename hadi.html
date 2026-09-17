@@ -12853,7 +12853,7 @@ window.executeAutoDistribution = function(dId) {
                         return cnt; 
                     };
 
-                    courses.forEach(c => {
+            courses.forEach(c => {
                         let sessionsNeeded = c.sessions || 2;
                         let cHours = chByName[c.name] || 2;
                         let isPhysicsExempt = getExemptPhysicsPractical() && isPhysicsCourse(c.name, c.code);
@@ -12866,30 +12866,15 @@ window.executeAutoDistribution = function(dId) {
                         const sessionsToPlace = sessionsNeeded - currentPlaced;
                         const uniqueKey = (c.code || c.name).trim();
                         const allowedInsIds = courseInsMap[uniqueKey] || courseInsMap[c.name] || []; 
-                                           
-           // 💡 تخصيص رقم مرجعي مستقل تماماً لكل رزمة جديدة لمنع تضارب المواعيد
-                       // 💡 اختيار الرقم المرجعي (يدعم دمج الرزم طالما توجد سعة شاغرة)
-                        let chosenCrn = '';
+
+                        // 💡 جلب الأرقام المتاحة لهذا المقرر
                         const targetCodeKey = normCode(c.code);
-                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : null;
-                        let crnObj = null;
+                        const availableCrnList = (targetCodeKey && crnBank[targetCodeKey]) ? crnBank[targetCodeKey] : [];
 
-                        if (availableCrnList && availableCrnList.length > 0) {
-                            // نبحث عن رقم فيه متسع كافٍ للرزمة (سواء كان مستخدماً للدمج أو جديداً)
-                            crnObj = availableCrnList.find(x => (x.cap - x.used) >= bStudents);
-
-                            if (!crnObj) {
-                                crnObj = availableCrnList[0];
-                            }
-
-                            if (crnObj) {
-                                chosenCrn = crnObj.crn;
-                                crnObj.used += bStudents; // خصم مقاعد الرزمة
-                            }
-                        } else {
-                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر (${c.code}).`);
+                        if (availableCrnList.length === 0) {
+                            missingCrnsLog.add(`- ${c.name} [رمز الخطة: ${c.code || 'بدون رمز'}] في [${fullBundleContext}]: لا توجد أرقام مرجعية مسجلة تطابق رمز هذا المقرر.`);
                         }
-                      
+
                         let assignedIns = null; 
                         const usedDaysForCourse = new Set(); 
 
@@ -12909,129 +12894,104 @@ window.executeAutoDistribution = function(dId) {
                             let preferredDays = candidateDays.filter(d => d !== bundleOffDay);
                             let fallbackDays = candidateDays.filter(d => d === bundleOffDay);
 
-                            preferredDays.sort((a, b) => {
-                                const loadA = getDayLoad(a);
-                                const loadB = getDayLoad(b);
-                                if (loadA !== loadB) return loadB - loadA; 
-                                return Math.random() - 0.5;
-                            });
-
+                            preferredDays.sort((a, b) => getDayLoad(a) - getDayLoad(b)); // تفضيل الأيام الأقل ضغطاً
                             let finalDays = [...preferredDays, ...fallbackDays];
                             const prioritizedPeriods = [...Array(P.length).keys()].sort((a, b) => a - b); 
 
-                      // 💡 جدول المواعيد المحجوزة مسبقاً لهذا الرقم المرجعي (إن وجد) لضمان التزامن
-                            let lockedSlotForCrn = null; // { di, pi, insId, roomId }
-                            if (chosenCrn) {
-                                for (const dept of getDepts()) {
-                                    const bList = getBundles(dept.id);
-                                    for (const b of bList) {
-                                        if (b.id === bundle.id) continue;
-                                        const bg = getBundleGrid(b.id);
-                                        for (let d = 0; d < bg.length; d++) {
-                                            for (let p = 0; p < (bg[d] || []).length; p++) {
-                                                const cell = bg[d][p];
-                                                if (cell && String(cell.crn).trim() === String(chosenCrn).trim()) {
-                                                    lockedSlotForCrn = { di: d, pi: p, insId: cell.insId, roomId: cell.roomId };
-                                                    break;
-                                                }
-                                            }
-                                            if (lockedSlotForCrn) break;
-                                        }
-                                        if (lockedSlotForCrn) break;
-                                    }
-                                }
-                            }
+                            let placedThisSession = false;
 
                             outerLoop:
                             for (let pi of prioritizedPeriods) { 
                                 for (let di of finalDays) {
-                                    // 💡 إذا كان هذا الرقم المرجعي مستخدماً مسبقاً في رزمة أخرى:
-                                    // نُلزم المعالج بأن يضعه في نفس اليوم ونفس الحصة المتزامنة تماماً (دمج حقيقي)
-                                    if (lockedSlotForCrn) {
-                                        if (di !== lockedSlotForCrn.di || pi !== lockedSlotForCrn.pi) {
-                                            continue; // نتجاهل أي موعد آخر وننتظر الوصول للموعد المتزامن المقفول للرقم
-                                        }
-                                    }
-
-                                    if (pi < 3 && getDayLoad(di) >= 3 && finalDays.some(d => getDayLoad(d) < 3) && !lockedSlotForCrn) {
-                                        continue; 
-                                    }
-
                                     const timeKey = `${di}_${pi}`;
-                                    if (bGrid[di][pi]) {
-                                        // إذا كان الموعد المتزامن للرقم المشترك محجوزاً مسبقاً في هذه الرزمة بمقرر آخر:
-                                        // لا يمكن دمجها هنا، نقوم بفك الارتباط وسحب رقم جديد بكر فوراً!
-                                        if (lockedSlotForCrn) {
-                                            const freshCrnObj = availableCrnList.find(x => x.used === 0 && x.crn !== chosenCrn);
-                                            if (freshCrnObj) {
-                                                crnObj.used = Math.max(0, crnObj.used - bStudents);
-                                                crnObj = freshCrnObj;
-                                                chosenCrn = crnObj.crn;
-                                                crnObj.used += bStudents;
-                                                lockedSlotForCrn = null; // تحرير القفل والبحث من جديد
-                                            }
+                                    if (bGrid[di][pi]) continue;
+
+                                    // 💡 البحث عن مدرب متاح
+                                    let chosenIns = null;
+                                    const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
+                                    const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
+
+                                    for (let insId of shuffledIns) {
+                                        if (!busyIns[insId] || !busyIns[insId].has(timeKey)) {
+                                            chosenIns = insId;
+                                            break;
                                         }
-                                        continue;
                                     }
+                                    if (!chosenIns && allowedInsIds.length > 0) continue;
 
-                                    // 💡 في حال الدمج: نأخذ نفس المدرب ونفس القاعة لضمان أن الرزمتين تجلسان معاً
-                                    let chosenIns = lockedSlotForCrn ? lockedSlotForCrn.insId : null;
-                                    if (!chosenIns) {
-                                        const insCandidates = assignedIns ? [assignedIns, ...allowedInsIds.filter(i => i !== assignedIns)] : allowedInsIds;
-                                        const shuffledIns = assignedIns ? insCandidates : [...allowedInsIds].sort(() => Math.random() - 0.5);
-
-                                        for (let insId of shuffledIns) {
-                                            if (!busyIns[insId] || !busyIns[insId].has(timeKey)) {
-                                                chosenIns = insId;
+                                    // 💡 البحث عن قاعة متاحة
+                                    let chosenRoom = null;
+                                    const assignedInsObj = chosenIns ? getInstructors(dId).find(i => i.id === chosenIns) : null;
+                                    if (assignedInsObj && assignedInsObj.defaultRoomId && (!busyRoom[assignedInsObj.defaultRoomId] || !busyRoom[assignedInsObj.defaultRoomId].has(timeKey))) {
+                                        chosenRoom = assignedInsObj.defaultRoomId;
+                                    } else {
+                                        const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
+                                        for (let rm of shuffledRooms) {
+                                            if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
+                                                chosenRoom = rm.id;
                                                 break;
                                             }
                                         }
                                     }
+                                    if (!chosenRoom && rooms.length > 0) continue; // تخطي إذا لم توجد قاعة
 
-                                    let chosenRoom = lockedSlotForCrn ? lockedSlotForCrn.roomId : null;
-                                    if (!chosenRoom) {
-                                        const assignedInsObj = chosenIns ? getInstructors(dId).find(i => i.id === chosenIns) : null;
-                                        if (assignedInsObj && assignedInsObj.defaultRoomId && (!busyRoom[assignedInsObj.defaultRoomId] || !busyRoom[assignedInsObj.defaultRoomId].has(timeKey))) {
-                                            chosenRoom = assignedInsObj.defaultRoomId;
-                                        } else {
-                                            const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
-                                            for (let rm of shuffledRooms) {
-                                                if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
-                                                    chosenRoom = rm.id;
-                                                    break;
-                                                }
-                                            }
+                                    // 💡 اختيار رقم مرجعي متوافق تماماً مع هذا الوقت (يمنع التعارض)
+                                    let chosenCrn = '';
+                                    let matchedCrnObj = null;
+
+                                    // 1. فحص الأرقام المتاحة: هل يوجد رقم جديد أو رقم مشترك في نفس هذا الموعد؟
+                                    for (let crnCandidate of availableCrnList) {
+                                        if ((crnCandidate.cap - crnCandidate.used) < bStudents) continue;
+                                        
+                                        // فحص هل هذا الرقم محجوز في موعد مختلف؟
+                                        const dup = findCrnDuplicate(targetDeptId, bundle.id, di, pi, crnCandidate.crn, c.name);
+                                        if (!dup) {
+                                            matchedCrnObj = crnCandidate;
+                                            chosenCrn = crnCandidate.crn;
+                                            break;
                                         }
                                     }
 
-                                    if (chosenIns || allowedInsIds.length === 0) {
-                                        bGrid[di][pi] = {
-                                            subj: c.name,
-                                            code: c.code || '',
-                                            insId: chosenIns || '',
-                                            roomId: chosenRoom || '',
-                                            crn: chosenCrn, 
-                                            duration: dur,
-                                            halfOnly: isHalf ? true : undefined,
-                                            cellType: currentSessType  
-                                        };
-
-                                        // لا نعتبر المدرب والقاعة مشغولين عن الرزمة المشتركة لأنهم يحضرون معاً
-                                        if (chosenIns) {
-                                            if (!busyIns[chosenIns]) busyIns[chosenIns] = new Set();
-                                            busyIns[chosenIns].add(timeKey);
-                                            assignedIns = chosenIns; 
-                                        }
-                                        if (chosenRoom) {
-                                            if (!busyRoom[chosenRoom]) busyRoom[chosenRoom] = new Set();
-                                            busyRoom[chosenRoom].add(timeKey);
-                                        }
-
-                                        usedDaysForCourse.add(di); 
-                                        break outerLoop;
+                                    // إذا لم نجد رقماً متوافقاً مع هذا التوقيت، نبحث في أوقات أخرى
+                                    if (!chosenCrn && availableCrnList.length > 0) {
+                                        continue;
                                     }
+
+                                    // 💡 تسكين الخلية بنجاح
+                                    bGrid[di][pi] = {
+                                        subj: c.name,
+                                        code: c.code || '',
+                                        insId: chosenIns || '',
+                                        roomId: chosenRoom || '',
+                                        crn: chosenCrn, 
+                                        duration: dur,
+                                        halfOnly: isHalf ? true : undefined,
+                                        cellType: currentSessType  
+                                    };
+
+                                    if (matchedCrnObj) {
+                                        matchedCrnObj.used += bStudents;
+                                    }
+
+                                    if (chosenIns) {
+                                        if (!busyIns[chosenIns]) busyIns[chosenIns] = new Set();
+                                        busyIns[chosenIns].add(timeKey);
+                                        assignedIns = chosenIns; 
+                                    }
+                                    if (chosenRoom) {
+                                        if (!busyRoom[chosenRoom]) busyRoom[chosenRoom] = new Set();
+                                        busyRoom[chosenRoom].add(timeKey);
+                                    }
+
+                                    usedDaysForCourse.add(di); 
+                                    placedThisSession = true;
+                                    break outerLoop;
                                 }
-                            }                    
+                            }
+
+                            if (!placedThisSession) {
+                                missingCrnsLog.add(`- ${c.name} في [${fullBundleContext}]: تعذر إيجاد وقت وقاعة شاغرة بدون تعارض لإكمال اللقاء (${sess + 1} من ${sessionsToPlace}).`);
+                            }
                         }
                     });
 
