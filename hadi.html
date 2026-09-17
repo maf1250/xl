@@ -562,11 +562,28 @@ const SUP_CODES=['رياض-101','انجل-111','انجل-112','انجل-113','ا
 // مقررات الحاسب تبقى في خطط قسم تقنية الأعمال وتُرحَّل للجدول العام لقسم الحاسب فقط للعرض
 const IT_CODES=[];
 
-// دالة التعرف على مقررات الدراسات العامة بالاسم
-function isSupCourseByName(name) {
+// 💡 دالة التعرف على مقررات الدراسات العامة (مع حماية مطلقة لمقررات التخصص)
+function isSupCourseByName(name, code) {
+  if (code) {
+    const c = String(code).trim();
+    // قائمة البادئات الصريحة والحصرية لمقررات الدراسات العامة
+    const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
+    if (SUP_PREFIXES.some(p => c.startsWith(p))) return true;
+    
+    // إذا كان الرمز يبدأ بأي كود تخصصي معروف (محسب، ادار، مكمر، تقن...) فهو تخصص قطعاً ولا يتبع الدراسات
+    return false;
+  }
+
   if (!name) return false;
   const n = name.replace(/[\u064B-\u0652\u0670]/g, '').trim();
-  return /إنجليز|انجليز|إسلام|اسلام|كتابة فنية|عرب|رياضيات|رياض|فيزياء|فيزي|إحصاء|احصاء|سلوك وظيفي|توجيه مهني|صحة وبيئة|تربية بدنية/.test(n);
+
+  // استثناءات صريحة لمقررات التخصص التي تحتوي على كلمات لغة أو دين
+  if (n.includes('طباعة') || n.includes('المحاسبة باللغة') || n.includes('مصطلحات') || n.includes('مراسلات') || n.includes('عمارة')) {
+    return false;
+  }
+
+  // مطابقة صريحة لأسماء مقررات الدراسات العامة فقط
+  return /^(لغة إنجليزية|لغة انجليزية|اللغة الإنجليزية|اللغة الانجليزية|الكتابة الفنية|الرياضيات|الفيزياء|الدراسات الإسلامية|السلوك الوظيفي|مقدمة في الإحصاء|توجيه مهني|صحة وبيئة|تربية بدنية)/.test(n);
 }
 
 // دالة التعرف على مقررات الحاسب المشتركة بالاسم
@@ -596,17 +613,22 @@ const normName = s => (s || '')
     .replace(/^ال/, '')
     .replace(/ال/g, '')
     .trim();
-// فحص مركزي لصلاحية المستخدم على مقرر معين لمنع التعديل أو السحب غير المصرح
-function canUserManageCourse(cName, cCat, targetDeptId) {
+// فحص مركزي لصلاحية المستخدم على مقرر معين
+function canUserManageCourse(cName, cCat, targetDeptId, cCode) {
     if (!CU) return false;
-    // 💡 إعطاء الصلاحية المطلقة للأدمن والوكيل
     if (CU.role === 'admin' || CU.role === 'vdean') return true;
     if (CU.role !== 'head') return false;
 
     let cat = cCat;
-    if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || cat === 'remote' || cat === 'selfstudy' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
+    const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
+
+    if (cCode && SUP_PREFIXES.some(p => String(cCode).trim().startsWith(p))) {
+        cat = 'sup';
+    } else if (cCode && !SUP_PREFIXES.some(p => String(cCode).trim().startsWith(p))) {
+        cat = 'dept'; // تخصصي للقسم قطعاً طالما رمزه تخصصي
+    } else if (!cat || cat === 'theory' || cat === 'practical' || cat === 'blended' || (cat !== 'sup' && cat !== 'comp' && cat !== 'dept')) {
         const sets = buildSupItNameSets();
-        if (sets.supNames.has(cName) || isSupCourseByName(cName)) {
+        if (sets.supNames.has(cName) || isSupCourseByName(cName, cCode)) {
             cat = 'sup';
         } else if (sets.itNames.has(cName) || isCompCourseByName(cName)) {
             cat = 'comp';
@@ -12332,16 +12354,25 @@ window.openAutoDistWizard = function(dId) {
             document.body.appendChild(modal);
         }
 
-        function isCourseMyResponsibility(c, targetDeptId) {
+    function isCourseMyResponsibility(c, targetDeptId) {
             const cName = c.name || c.subj || '';
-            const cCat = c.cat || (isSupCourseByName(cName) ? 'sup' : (isCompCourseByName(cName) ? 'comp' : 'dept'));
+            const cCode = c.code || '';
             
-            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, c.code) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) {
-                return false;
-            }
-            if (dId === 'sup') return cCat === 'sup' || isSupCourseByName(cName); 
-            if (dId === 'it') return (targetDeptId === 'it' && cCat === 'dept') || cCat === 'comp' || isCompCourseByName(cName); 
-            return cCat === 'dept'; 
+            // قائمة بادئات الدراسات العامة الحصرية
+            const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
+            const COMP_SHARED_EXACT = ['حاسب-101', 'حاسب-102', 'حاسب 101', 'حاسب 102', 'حال4102', 'حاسب100'];
+
+            // 💡 إذا كان رمزه لا يبدأ ببادئات الدراسات العامة فليس دراسات عامة إطلاقاً
+            const isReallySup = SUP_PREFIXES.some(p => cCode.startsWith(p)) || (isSupCourseByName(cName, cCode) && !cCode);
+            const isReallyComp = COMP_SHARED_EXACT.some(p => cCode.includes(p)) || (isCompCourseByName(cName) && !cCode);
+
+            if (getExemptPhysicsPractical() && isPhysicsCourse(cName, cCode) && (cName.includes('عملي') || cName.includes('مختبر') || cName.includes('معمل'))) return false;
+            
+            if (dId === 'sup') return isReallySup; 
+            if (dId === 'it') return (targetDeptId === 'it' && !isReallySup) || isReallyComp; 
+            
+            // للأقسام التخصصية: إذا لم يكن دراسات عامة ولا حاسب فهو تابع للقسم
+            return !isReallySup && !isReallyComp; 
         }
         
         const allCoursesMap = new Map();
