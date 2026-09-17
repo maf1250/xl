@@ -1909,15 +1909,27 @@ function _checkAnyConflict(){
   const subjEl=document.getElementById('cm-subj');
   const currentSubj=subjEl?subjEl.value.trim():'';
   const msgs=[];
-  if(insId&&insId!=='__new__'){const c=findConflict(dId,entityId,di,pi,insId);if(c)msgs.push('⚠️ تعارض مدرّب مع: <strong>'+esc(c.name)+'</strong>');}
-  if(roomId&&roomId!=='__newroom__'){const c=findRoomConflict(dId,entityId,di,pi,roomId);if(c)msgs.push('⛔ القاعة محجوزة بنفس الوقت في: <strong>'+esc(c.name)+'</strong>'+(c.subj?' — '+esc(c.subj):'')+(c.deptName&&c.deptId!==dId?' <span style="font-weight:700">(قسم '+esc(c.deptName)+')</span>':''));}
-if(crn){
-    const dup = findCrnDuplicate(ctx.deptId, ctx.sectionId || ctx.bundleId, ctx.di, ctx.pi, crn, subj);
-    if(dup){
-      showToastMsg('⛔ خطأ في الرقم المرجعي: الرقم (' + crn + ') مستخدم مسبقاً في: ' + dup.name + '. يجب أن يكون لنفس الرقم موعد موحد تماماً!');
-      return;
-    }
-  }  if(msgs.length){box.style.display='block';box.innerHTML=msgs.join('<br/>');}else box.style.display='none';
+  
+  if(insId&&insId!=='__new__'){
+    const c=findConflict(dId,entityId,di,pi,insId);
+    if(c)msgs.push('⚠️ تعارض مدرّب مع: <strong>'+esc(c.name)+'</strong>');
+  }
+  if(roomId&&roomId!=='__newroom__'){
+    const c=findRoomConflict(dId,entityId,di,pi,roomId);
+    if(c)msgs.push('⛔ القاعة محجوزة بنفس الوقت في: <strong>'+esc(c.name)+'</strong>'+(c.subj?' — '+esc(c.subj):'')+(c.deptName&&c.deptId!==dId?' <span style="font-weight:700">(قسم '+esc(c.deptName)+')</span>':''));
+  }
+  if(crn){
+    // 💡 تم تصحيح المتغير هنا من subj إلى currentSubj لمنع الخطأ
+    const c=findCrnDuplicate(dId,entityId,di,pi,crn,currentSubj);
+    if(c)msgs.push('⚠️ تعارض في الرقم المرجعي: '+esc(crn)+' مستخدم مسبقاً في: <strong>'+esc(c.name)+'</strong>');
+  }
+  
+  if(msgs.length){
+    box.style.display='block';
+    box.innerHTML=msgs.join('<br/>');
+  } else {
+    box.style.display='none';
+  }
   updateCrnLinkBox(dId,crn);
 }
 
