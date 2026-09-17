@@ -1516,67 +1516,81 @@ function emptyMsg(msg){return `<div class="empty"><div class="ei">📭</div><p>$
 function parseCSV(text){if(text.charCodeAt(0)===0xFEFF)text=text.slice(1);const rows=[];let row=[],field='',inQ=false;for(let i=0;i<text.length;i++){const c=text[i];if(inQ){if(c==='"'){if(text[i+1]==='"'){field+='"';i++;}else inQ=false;}else field+=c;}else{if(c==='"')inQ=true;else if(c===','){row.push(field);field='';}else if(c==='\r'){}else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';}else field+=c;}}if(field.length||row.length){row.push(field);rows.push(row);}return rows;}
 function normalizeDayName(s){const m={'الأحد':'أحد','الاثنين':'اثنين','الثلاثاء':'ثلاثاء','الأربعاء':'أربعاء','الخميس':'خميس','احد':'أحد','اثنين':'اثنين','ثلاثاء':'ثلاثاء','اربعاء':'أربعاء','خميس':'خميس'};return m[(s||'').trim()]||(s||'').trim();}
 function startTimeToPeriod(timeStr){const P=getPeriods();const hhmm=parseInt((timeStr||'').replace(':','').replace(/\D/g,'').substring(0,4));if(isNaN(hhmm))return -1;const starts=P.map(p=>{const parts=p.t.split(' - ')[0].trim().split(':');return parseInt(parts[0])*100+parseInt(parts[1]||0);});let best=-1;starts.forEach((s,i)=>{if(Math.abs(hhmm-s)<=15)best=i;});return best;}
-// جدول المدربين (SS07) — جميع المدربين الفصل السابق: الغرض الوحيد من هذا الملف هو تحديث/تعبئة قائمة
-// المدربين بالقسم (رقم المدرب + اسم المدرب) فقط. هذا الملف من الفصل *السابق* فلا علاقة له إطلاقاً
-// بالأرقام المرجعية أو الجداول أو القاعات الحالية — لا نلمس أي شيء من هذا كله، فقط قائمة المدربين
-function processScheduleCSV(dId,text){
-  const delim=detectDelimiter(text);
-  const rows=parseDelimitedCSV(text,delim);
-  if(rows.length<2)return {error:'ملف فارغ'};
-  const header=rows[0].map(h=>String(h==null?'':h).trim());
-  const iInsNo=header.indexOf('رقم المدرب');
-  const iInsName=header.indexOf('اسم المدرب');
-  const iRoom=findColIndex(header,['رقم القاعة','قاعة']);
-  const iBuilding=findColIndex(header,['المبنى','مبنى']);
-  const iCourseName=findColIndex(header,['وصف المقرر','اسم المقرر', 'المقرر']); // جديد: لالتقاط مقررات المدرب
+
+  function processScheduleCSV(dId, text){
+  const delim = detectDelimiter(text);
+  const rows = parseDelimitedCSV(text, delim);
+  if (rows.length < 2) return { error: 'ملف فارغ' };
   
-  if(iInsName===-1)return {error:'تنسيق الملف غير معروف — تأكد من وجود عمود «اسم المدرب»'};
-  let insList=getInstructors(dId);
-  let newIns=0,updatedIns=0,newRooms=0;
-  const seenIns=new Set(),newRoomEntries=[];
-  const seenRooms=new Set();
+  const header = rows[0].map(h => String(h == null ? '' : h).trim());
+  const iInsNo = header.indexOf('رقم المدرب');
+  const iInsName = header.indexOf('اسم المدرب');
+  const iRoom = findColIndex(header, ['رقم القاعة', 'قاعة']);
+  const iBuilding = findColIndex(header, ['المبنى', 'مبنى']);
+  const iCourseCode = header.indexOf('المقرر');
+  const iCourseName = header.indexOf('وصف المقرر') > -1 ? header.indexOf('وصف المقرر') : findColIndex(header, ['اسم المقرر', 'وصف المقرر']);
   
-  rows.slice(1).forEach(r=>{
-    const insName=String(r[iInsName]||'').trim();
-    if(insName){
+  if (iInsName === -1) return { error: 'تنسيق الملف غير معروف — تأكد من وجود عمود «اسم المدرب»' };
+  
+  let insList = getInstructors(dId);
+  let newIns = 0, updatedIns = 0, newRooms = 0;
+  const seenIns = new Set();
+  const seenRooms = new Set();
+  const newRoomEntries = [];
+  
+  rows.slice(1).forEach(r => {
+    const insName = String(r[iInsName] || '').trim();
+    const roomName = iRoom > -1 ? String(r[iRoom] || '').trim() : '';
+    const building = iBuilding > -1 ? String(r[iBuilding] || '').trim() : '';
+
+    if (insName) {
       seenIns.add(insName);
-      const empNo=iInsNo>-1?String(r[iInsNo]||'').trim():'';
-      let ins=insList.find(x=>x.name===insName);
-      if(!ins){
-        ins={id:genId(),name:insName,empNo,historyCourses:[]};
+      const empNo = iInsNo > -1 ? String(r[iInsNo] || '').trim() : '';
+      let ins = insList.find(x => x.name === insName);
+      
+      if (!ins) {
+        ins = { id: genId(), name: insName, empNo, historyCourses: [], historyRooms: [] };
         insList.push(ins);
         newIns++;
-      } else if(empNo&&!ins.empNo){
-        ins.empNo=empNo;updatedIns++;
+      } else if (empNo && !ins.empNo) {
+        ins.empNo = empNo;
+        updatedIns++;
       }
       
-      // حفظ المقرر في تاريخ المدرب (للاستنتاج التلقائي لاحقاً)
-      const cName = iCourseName>-1?String(r[iCourseName]||'').trim():'';
-      if(cName) {
-         if(!ins.historyCourses) ins.historyCourses = [];
-         if(!ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
+      // 💡 حفظ المقرر والرمز في تاريخ تدريس المدرب
+      const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
+      const cCode = iCourseCode > -1 ? String(r[iCourseCode] || '').trim() : '';
+      if (!ins.historyCourses) ins.historyCourses = [];
+      if (cName && !ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
+      if (cCode && !ins.historyCourses.includes(cCode)) ins.historyCourses.push(cCode);
+
+      // 💡 حفظ القاعة في تاريخ المدرب لاستنتاج القاعة الافتراضية
+      if (roomName && !roomName.includes('INVALID')) {
+        if (!ins.historyRooms) ins.historyRooms = [];
+        ins.historyRooms.push(roomName);
       }
     }
-    const roomName=iRoom>-1?String(r[iRoom]||'').trim():'';
-    if(roomName&&!roomName.includes('INVALID')&&!seenRooms.has(roomName)){
+
+    // حفظ القاعة في قائمة قاعات القسم
+    if (roomName && !roomName.includes('INVALID') && !seenRooms.has(roomName)) {
       seenRooms.add(roomName);
-      const building=iBuilding>-1?String(r[iBuilding]||'').trim():'';
-      newRoomEntries.push({name:roomName,building:building||deriveBuildingFromRoomName(roomName)});
+      newRoomEntries.push({ name: roomName, building: building || deriveBuildingFromRoomName(roomName) });
     }
   });
   
-  let roomList=getRooms(dId);
-  newRoomEntries.forEach(nr=>{
-    if(!roomList.find(x=>x.name===nr.name)){roomList.push({id:genId(),name:nr.name,building:nr.building});newRooms++;}
+  let roomList = getRooms(dId);
+  newRoomEntries.forEach(nr => {
+    if (!roomList.find(x => x.name === nr.name)) {
+      roomList.push({ id: genId(), name: nr.name, building: nr.building });
+      newRooms++;
+    }
   });
-  saveRooms(dId,roomList);
-  saveInstructors(dId,insList);
-  return {newIns,updatedIns,newRooms};
+
+  saveRooms(dId, roomList);
+  saveInstructors(dId, insList);
+  return { newIns, updatedIns, newRooms };
 }
-// يقرأ ملف SS01 (جدول الطولي) بالاعتماد على **اسم** العمود لا موقعه — إصلاح جذري لخلل كان يقرأ
-// أعمدة بمواقع ثابتة (مثل r[5] كاسم مقرر)، فإذا اختلف ترتيب أعمدة الملف المرفوع عن المتوقع، كان
-// يُدخل بيانات خاطئة تمامًا (مثل اسم مدرّب بدل اسم مقرر) دون أي تحذير — وهذا هو سبب "الشعب" الفاسدة
-function processSectionListCSV(dId, text){
+  function processSectionListCSV(dId, text){
   const delim = detectDelimiter(text);
   const rows = parseDelimitedCSV(text, delim);
   if(rows.length < 2) return;
@@ -3211,11 +3225,23 @@ function setupHTML(deptId){
     <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('instructor','${deptId}','${x.id}')">✏️</button>
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('instructor','${deptId}','${x.id}')">🗑️</button>
   </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
-  const roomsListHTML=rooms.length?rooms.map(x=>`<div class="rc"><span class="rci">🚪</span><div class="rcb"><div class="rct">${esc(x.name)}</div>${x.building?`<div class="rcm"><span class="badge bb">🏢 مبنى ${esc(x.building)}</span></div>`:''}</div>
-    <button class="bedt" style="padding:4px 8px;font-size:11px" title="رقم المبنى" onclick="editRoomBuilding('${deptId}','${x.id}')">🏢</button>
-    <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('room','${deptId}','${x.id}')">✏️</button>
-    <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('room','${deptId}','${x.id}')">🗑️</button>
-  </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
+ const insListHTML=ins.length?ins.map(x=>{
+    const defRoom = rooms.find(r => r.id === x.defaultRoomId);
+    const defRoomBadge = defRoom ? `<span class="badge bg" style="font-size:10px">🚪 قاعة: ${esc(defRoom.name)}</span>` : '';
+    return `<div class="rc"><span class="rci">👨‍🏫</span>
+      <div class="rcb">
+        <div class="rct">${esc(x.name)}</div>
+        <div class="rcm">
+          ${x.empNo?`<span class="badge bb">🔢 ${esc(x.empNo)}</span>`:''}
+          ${defRoomBadge}
+        </div>
+      </div>
+      <button class="bedt" style="padding:4px 8px;font-size:11px" title="تحديد قاعة افتراضية للمدرب" onclick="assignDefaultRoomPrompt('${deptId}','${x.id}')">🚪</button>
+      <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم الوظيفي" onclick="editInstructorEmpNo('${deptId}','${x.id}')">🔢</button>
+      <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('instructor','${deptId}','${x.id}')">✏️</button>
+      <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('instructor','${deptId}','${x.id}')">🗑️</button>
+    </div>`;
+  }).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
   const specOptions=specs.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   const missingRoomsCount=countMissingRooms(deptId);
   return `${plansHTML(deptId)}<div class="g3 g4">
@@ -12232,15 +12258,18 @@ window.saveEditBundleStudents = function(actualDeptId, bundleId) {
     }
     closeModal('editBundleStudentsModal');
 };
-
+// 💡 استنتاج ذكي وشامل من تقرير SS07 (ربط المقررات + استنتاج وتعيين القاعات الافتراضية للمدربين)
 window.applyWizardSS07Mapping = function(dId) {
     try {
         const insList = getInstructors(dId) || [];
+        const roomsList = getRooms(dId) || [];
         const checkboxes = document.querySelectorAll('.wiz-course-ins');
-        let mappedCount = 0;
+        let mappedCoursesCount = 0;
+        let mappedRoomsCount = 0;
 
         const clean = s => (s || '').replace(/[\u064B-\u0652\u0670\s\-()]/g, '').replace(/[إأآا]/g, 'ا').replace(/ة/g, 'ه').replace(/[يى]/g, 'ي').toLowerCase();
 
+        // 1. استنتاج وربط المقررات بالمدربين
         checkboxes.forEach(cb => {
             const cName = cb.getAttribute('data-course');
             const insId = cb.value;
@@ -12254,16 +12283,44 @@ window.applyWizardSS07Mapping = function(dId) {
                 });
                 if (hasCourse) {
                     cb.checked = true;
-                    mappedCount++;
+                    mappedCoursesCount++;
                 }
             }
         });
 
-        if (mappedCount > 0) {
-            showToastMsg(`✅ تم استنتاج وتحديد ${mappedCount} ارتباط للمدربين بناءً على تقرير (SS07)`);
-        } else {
-            showToastMsg('ℹ️ لم يتم العثور على مقررات سابقة مطابقة لهؤلاء المدربين.');
+        // 2. استنتاج وتثبيت القاعة الافتراضية (Default Room) لكل مدرب من تاريخ تدريسه
+        insList.forEach(ins => {
+            if (ins.historyRooms && ins.historyRooms.length > 0) {
+                // حساب القاعة الأكثر تكراراً للمدرب
+                const roomCounts = {};
+                ins.historyRooms.forEach(rName => {
+                    roomCounts[rName] = (roomCounts[rName] || 0) + 1;
+                });
+                const mostUsedRoomName = Object.keys(roomCounts).sort((a,b) => roomCounts[b] - roomCounts[a])[0];
+
+                // البحث عن القاعة وتثبيتها كقاعة افتراضية
+                const matchedRoom = roomsList.find(r => r.name === mostUsedRoomName || clean(r.name) === clean(mostUsedRoomName));
+                if (matchedRoom) {
+                    ins.defaultRoomId = matchedRoom.id;
+                    mappedRoomsCount++;
+                }
+            }
+        });
+
+        if (mappedRoomsCount > 0) {
+            saveInstructors(dId, insList);
         }
+
+        let msg = '';
+        if (mappedCoursesCount > 0) msg += `✅ تم ربط ${mappedCoursesCount} مقرر بالمدربين. `;
+        if (mappedRoomsCount > 0) msg += `🚪 وتم تثبيت القاعات الافتراضية لـ ${mappedRoomsCount} مدرب تلقائياً من تقرير SS07.`;
+        
+        if (!mappedCoursesCount && !mappedRoomsCount) {
+            showToastMsg('ℹ️ لم يتم العثور على بيانات سابقة مطابقة في تاريخ المدربين.');
+        } else {
+            showToastMsg(msg);
+        }
+
     } catch (err) {
         console.error(err);
         showToastMsg('❌ حدث خطأ أثناء الاستنتاج');
@@ -12812,12 +12869,20 @@ window.executeAutoDistribution = function(dId) {
                                         }
                                     }
 
+                                // 💡 اختيار القاعة: الأولوية المطلقة للقاعة الافتراضية للمدرب بشرط عدم وجود تعارض زمني
                                     let chosenRoom = null;
-                                    const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
-                                    for (let rm of shuffledRooms) {
-                                        if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
-                                            chosenRoom = rm.id;
-                                            break;
+                                    const assignedInsObj = assignedIns ? getInstructors(dId).find(i => i.id === assignedIns) : null;
+
+                                    if (assignedInsObj && assignedInsObj.defaultRoomId && (!busyRoom[assignedInsObj.defaultRoomId] || !busyRoom[assignedInsObj.defaultRoomId].has(timeKey))) {
+                                        chosenRoom = assignedInsObj.defaultRoomId;
+                                    } else {
+                                        // إذا لم تكن له قاعة افتراضية أو كانت محجوزة بنفس الوقت، يختار قاعة أخرى شاغرة
+                                        const shuffledRooms = [...rooms].sort(() => Math.random() - 0.5);
+                                        for (let rm of shuffledRooms) {
+                                            if (!busyRoom[rm.id] || !busyRoom[rm.id].has(timeKey)) {
+                                                chosenRoom = rm.id;
+                                                break;
+                                            }
                                         }
                                     }
 
@@ -13235,7 +13300,6 @@ function processGlobalSC04(text) {
     });
   }
 
-// دالة لمعالجة وتوزيع ملف SS07 الشامل بذكاء
 function processGlobalSS07(text) {
     const delim = detectDelimiter(text);
     const rows = parseDelimitedCSV(text, delim);
@@ -13262,16 +13326,17 @@ function processGlobalSS07(text) {
         deptMap[d.id] = { insList: getInstructors(d.id), roomsList: getRooms(d.id), seenIns: new Set(), seenRooms: new Set() };
     });
 
- // قائمة البادئات الشهيرة لمقررات الدراسات العامة
     const SUP_PREFIXES = ['انجل', 'عربي', 'عرب', 'رياض', 'ريض', 'اسلم', 'سلم', 'اسلك', 'سلك', 'فيزي', 'فيز', 'احصا', 'احص', 'بدني', 'نشاط', 'ماهر', 'مهني', 'حاجك', 'توجي', 'بيئة'];
 
     rows.slice(1).forEach(r => {
         let deptName = String(r[iDept] || '').trim();
         const cCode = iCourseCode > -1 ? String(r[iCourseCode] || '').trim() : '';
         const cName = iCourseName > -1 ? String(r[iCourseName] || '').trim() : '';
+        const roomName = iRoom > -1 ? String(r[iRoom] || '').trim() : '';
+        const building = iBuilding > -1 ? String(r[iBuilding] || '').trim() : '';
 
-        // 💡 فحص ذكي: إذا كان المدرب يدرس مقرراً من مقررات الدراسات العامة، يوجه لقسم الدراسات العامة فوراً
-        const isSupCourse = SUP_PREFIXES.some(p => cCode.startsWith(p)) || isSupCourseByName(cName);
+        // توجيه مدربي مقررات الدراسات العامة لقسم الدراسات العامة
+        const isSupCourse = SUP_PREFIXES.some(p => cCode.startsWith(p)) || isSupCourseByName(cName, cCode);
         
         let matchedDept = null;
         if (isSupCourse) {
@@ -13307,23 +13372,31 @@ function processGlobalSS07(text) {
             dData.seenIns.add(insName);
             const empNo = iInsNo > -1 ? String(r[iInsNo] || '').trim() : '';
             let ins = dData.insList.find(x => x.name === insName);
+            
             if (!ins) {
-                ins = { id: genId(), name: insName, empNo, historyCourses: [] };
+                ins = { id: genId(), name: insName, empNo, historyCourses: [], historyRooms: [] };
                 dData.insList.push(ins);
             } else if (empNo && !ins.empNo) {
                 ins.empNo = empNo;
             }
+
+            // 💡 حفظ المقررات والرموز السابقة للمدرب
             if (!ins.historyCourses) ins.historyCourses = [];
             if (cName && !ins.historyCourses.includes(cName)) ins.historyCourses.push(cName);
             if (cCode && !ins.historyCourses.includes(cCode)) ins.historyCourses.push(cCode);
+
+            // 💡 حفظ القاعات السابقة للمدرب
+            if (roomName && !roomName.includes('INVALID')) {
+                if (!ins.historyRooms) ins.historyRooms = [];
+                ins.historyRooms.push(roomName);
+            }
         }
 
-        const roomName = iRoom > -1 ? String(r[iRoom] || '').trim() : '';
+        // حفظ القاعات
         if (roomName && !roomName.includes('INVALID') && !dData.seenRooms.has(roomName)) {
             dData.seenRooms.add(roomName);
             let rm = dData.roomsList.find(x => x.name === roomName);
             if (!rm) {
-                const building = iBuilding > -1 ? String(r[iBuilding] || '').trim() : '';
                 dData.roomsList.push({ id: genId(), name: roomName, building: building || deriveBuildingFromRoomName(roomName) });
             }
         }
@@ -13340,6 +13413,44 @@ function closeUnitReportsWizard() {
   if (modal) modal.style.display = 'none';
 }
 
+  // 💡 دالة تحديد قاعة افتراضية ثابتة للمدرب يدوياً
+window.assignDefaultRoomPrompt = function(deptId, insId) {
+  const insList = getInstructors(deptId);
+  const ins = insList.find(i => i.id === insId);
+  if (!ins) return;
+
+  const rooms = getRooms(deptId);
+  if (!rooms.length) {
+    showToastMsg('⚠️ لا توجد قاعات مسجلة في هذا القسم.');
+    return;
+  }
+
+  let promptText = `اختر القاعة الافتراضية للمدرب "${ins.name}":\n\n0) بدون قاعة افتراضية\n`;
+  rooms.forEach((r, idx) => {
+    promptText += `${idx + 1}) قاعة: ${r.name} ${r.building ? `(مبنى ${r.building})` : ''}\n`;
+  });
+  promptText += `\nأدخل رقم الخيار:`;
+
+  const choice = prompt(promptText);
+  if (choice === null) return;
+
+  const num = parseInt(choice);
+  if (isNaN(num) || num < 0 || num > rooms.length) {
+    showToastMsg('❌ اختيار غير صحيح.');
+    return;
+  }
+
+  if (num === 0) {
+    delete ins.defaultRoomId;
+    showToastMsg(`✅ تم إلغاء القاعة الافتراضية للمدرب ${ins.name}`);
+  } else {
+    ins.defaultRoomId = rooms[num - 1].id;
+    showToastMsg(`✅ تم تعيين القاعة (${rooms[num - 1].name}) للمدرب ${ins.name}`);
+  }
+
+  saveInstructors(deptId, insList);
+  renderDeptTabContent(deptId);
+};
 
 </script>
 </body>
