@@ -1717,18 +1717,16 @@ function isSharedComputerCourseName(subjName){
 const BIZ_ONLY_COURSE_NAMES=['أساسيات ريادة الأعمال','ريادة الأعمال','مبادئ ريادة الأعمال'];
 function isBizOnlyCourseName(subjName){return !!subjName&&BIZ_ONLY_COURSE_NAMES.includes(subjName);}
 
-// 💡 تحديد القسم المزوّد للمقرر (مع التعامل الذكي مع رياد-101 وبقية مقررات التخصص)
+// 💡 تحديد القسم المسؤول عن المقرر (رياد-101 دائماً للدراسات العامة)
 function getCoursePoolDept(subjName, currentDeptId, courseCode){
   const codeClean = normCode(courseCode || '');
-  const hasBiz = getDepts().some(d => d.id === 'biz' || d.name.includes('اعمال') || d.name.includes('أعمال'));
   
-  // 1. فقط رياد-101 هو المقرر المشترك العام
+  // 1. مقرر رياد-101 يتبع قسم الدراسات العامة حصراً ودائماً
   if (codeClean === 'رياد101' || (subjName && (subjName.includes('أساسيات ريادة') || subjName === 'ريادة الأعمال'))) {
-    // إذا وجد قسم إدارة الأعمال يدرسه، وإلا يدرسه قسم الدراسات العامة
-    return hasBiz ? (getDepts().find(d => d.id === 'biz' || d.name.includes('اعمال') || d.name.includes('أعمال'))?.id || 'biz') : 'sup';
+    return 'sup';
   }
 
-  // 2. بقية مقررات ريادة الأعمال (رياد-232، رياد-262...) هي مقررات تخصصية تتبع نفس القسم
+  // 2. بقية مقررات ريادة الأعمال التخصصية (رياد-232، رياد-262...) تتبع نفس القسم التخصصي
   if (codeClean.startsWith('رياد')) {
     return currentDeptId;
   }
@@ -3234,11 +3232,6 @@ function setupHTML(deptId){
     <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('section','${deptId}','${x.id}')">🗑️</button>
   </div>`;
   }).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
-  const insListHTML=ins.length?ins.map(x=>`<div class="rc"><span class="rci">👨‍🏫</span><div class="rcb"><div class="rct">${esc(x.name)}</div>${x.empNo?`<div class="rcm"><span class="badge bb">🔢 ${esc(x.empNo)}</span></div>`:''}</div>
-    <button class="bedt" style="padding:4px 8px;font-size:11px" title="الرقم الوظيفي" onclick="editInstructorEmpNo('${deptId}','${x.id}')">🔢</button>
-    <button class="bedt" style="padding:4px 8px;font-size:11px" onclick="renameItem('instructor','${deptId}','${x.id}')">✏️</button>
-    <button class="bdng" style="padding:4px 8px;font-size:11px" onclick="deleteItem('instructor','${deptId}','${x.id}')">🗑️</button>
-  </div>`).join(''):'<div class="empty" style="padding:14px"><p style="font-size:12px">لا توجد عناصر بعد</p></div>';
  const insListHTML=ins.length?ins.map(x=>{
     const defRoom = rooms.find(r => r.id === x.defaultRoomId);
     const defRoomBadge = defRoom ? `<span class="badge bg" style="font-size:10px">🚪 قاعة: ${esc(defRoom.name)}</span>` : '';
@@ -5979,26 +5972,24 @@ function masterTabHTMLGrid(dId,supNamesOverride,itNamesOverride){
   }
   const isSup=dId==='sup',isIt=dId==='it';
   const hasIT = getDepts().some(d => d.id === 'it');
- function belongs(subj, srcDeptId, cCode){
+function belongs(subj, srcDeptId, cCode){
       const codeClean = normCode(cCode || '');
-      const hasBiz = getDepts().some(d => d.id === 'biz' || d.name.includes('اعمال') || d.name.includes('أعمال'));
       const hasIT = getDepts().some(d => d.id === 'it');
 
-      // رياد-101 فقط
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
       if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
-          if (hasBiz) return dId === 'biz';
-          return dId === 'sup';
+          return isSup; // يظهر فقط إذا كنا في جدول قسم الدراسات العامة
       }
 
-      // بقية رياد (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
+      // 2. بقية مقررات ريادة الأعمال (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
       if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
           return srcDeptId === dId;
       }
 
-      // الدراسات العامة
-      if (isSup) return (sets.supNames.has(subj) && subj !== 'أساسيات ريادة الأعمال') || (!hasIT && sets.itNames.has(subj));
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
       
-      // الحاسب المشترك
+      // 4. الحاسب المشترك
       if (isIt) return sets.itNames.has(subj);
       
       if (srcDeptId !== undefined && srcDeptId !== dId) return false;
@@ -6078,26 +6069,24 @@ function printMasterInsGrid(dId){
   const isSup=dId==='sup',isIt=dId==='it';
   const {supNames,itNames}=buildSupItNameSets();
   const hasIT = getDepts().some(d => d.id === 'it');
-  function belongs(subj, srcDeptId, cCode){
+function belongs(subj, srcDeptId, cCode){
       const codeClean = normCode(cCode || '');
-      const hasBiz = getDepts().some(d => d.id === 'biz' || d.name.includes('اعمال') || d.name.includes('أعمال'));
       const hasIT = getDepts().some(d => d.id === 'it');
 
-      // رياد-101 فقط
+      // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
       if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
-          if (hasBiz) return dId === 'biz';
-          return dId === 'sup';
+          return isSup; // يظهر فقط إذا كنا في جدول قسم الدراسات العامة
       }
 
-      // بقية رياد (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
+      // 2. بقية مقررات ريادة الأعمال (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
       if (codeClean.startsWith('رياد') && codeClean !== 'رياد101') {
           return srcDeptId === dId;
       }
 
-      // الدراسات العامة
-      if (isSup) return (sets.supNames.has(subj) && subj !== 'أساسيات ريادة الأعمال') || (!hasIT && sets.itNames.has(subj));
+      // 3. الدراسات العامة
+      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
       
-      // الحاسب المشترك
+      // 4. الحاسب المشترك
       if (isIt) return sets.itNames.has(subj);
       
       if (srcDeptId !== undefined && srcDeptId !== dId) return false;
