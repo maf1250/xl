@@ -5983,10 +5983,13 @@ function masterTabHTMLGrid(dId,supNamesOverride,itNamesOverride){
 function belongs(subj, srcDeptId, cCode){
       const codeClean = normCode(cCode || '');
       const hasIT = getDepts().some(d => d.id === 'it');
+      
+      // 💡 تعريف sets لمنع خطأ ReferenceError
+      const sets = buildSupItNameSets();
 
       // 1. رياد-101 يتبع قسم الدراسات العامة دائماً
       if (codeClean === 'رياد101' || subj === 'أساسيات ريادة الأعمال') {
-          return isSup; // يظهر فقط إذا كنا في جدول قسم الدراسات العامة
+          return isSup; // يظهر فقط في جدول قسم الدراسات العامة
       }
 
       // 2. بقية مقررات ريادة الأعمال (رياد-266 وغيرها) تتبع قسمها التخصصي فقط
@@ -5995,10 +5998,14 @@ function belongs(subj, srcDeptId, cCode){
       }
 
       // 3. الدراسات العامة
-      if (isSup) return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+      if (isSup) {
+          return sets.supNames.has(subj) || (!hasIT && sets.itNames.has(subj));
+      }
       
       // 4. الحاسب المشترك
-      if (isIt) return sets.itNames.has(subj);
+      if (isIt) {
+          return sets.itNames.has(subj);
+      }
       
       if (srcDeptId !== undefined && srcDeptId !== dId) return false;
       return (!sets.supNames.has(subj) && !sets.itNames.has(subj));
